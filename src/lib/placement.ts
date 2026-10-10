@@ -40,28 +40,6 @@ function occupiedSet(placements: Placement[], except?: number): Set<string> {
   return set;
 }
 
-function claimNearest(
-  occ: Set<string>,
-  row: number,
-  target: number,
-  rows: number,
-  cols: number,
-): { row: number; slot: number } | null {
-  const t = Math.min(Math.max(target, 0), cols - 1);
-  for (let dr = 0; dr < rows; dr++) {
-    for (const r of dr === 0 ? [row] : [row - dr, row + dr]) {
-      if (r < 0 || r >= rows) continue;
-      for (let d = 0; d < cols; d++) {
-        for (const c of d === 0 ? [t] : [t - d, t + d]) {
-          if (c < 0 || c >= cols) continue;
-          if (!occ.has(key(r, c))) return { row: r, slot: c };
-        }
-      }
-    }
-  }
-  return null;
-}
-
 /** Sorterer korister etter stemmegruppe (blokker fra venstre) og høyde (høyest bakerst). */
 export function autoSort(
   placements: Placement[],
@@ -90,6 +68,25 @@ export function autoSort(
   }
   rows = Math.max(rows, ...pinned.map((p) => p.row + 1), 1);
 
+  // Radstørrelser: jevnt fordelt (bakerste rader får evt. én ekstra), så alle rader er
+  // fylt tett uten hull. Låste sangere holder av sin plass i sin rad.
+  const base = Math.floor(N / rows);
+  const rem = N % rows;
+  const rowSize = Array.from({ length: rows }, (_, r) => base + (r >= rows - rem ? 1 : 0));
+  const pinnedCount = Array.from({ length: rows }, (_, r) => pinned.filter((p) => p.row === r).length);
+  const cap = rowSize.map((sz, r) => Math.max(0, sz - pinnedCount[r]));
+  let capSum = cap.reduce((a, b) => a + b, 0);
+  while (capSum > free.length) {
+    const r = cap.indexOf(Math.max(...cap));
+    cap[r]--;
+    capSum--;
+  }
+  while (capSum < free.length) {
+    const r = cap.indexOf(Math.min(...cap));
+    cap[r]++;
+    capSum++;
+  }
+
   const groupOrder = sortedGroups(ctx.groups).map((g) => g.id);
   const byGroup = new Map<number, Placement[]>();
   for (const p of free) {
@@ -102,9 +99,9 @@ export function autoSort(
     ...[...byGroup.keys()].filter((g) => !groupOrder.includes(g)),
   ];
 
-  type Block = { gid: number; tiers: Placement[][]; width: number; start: number };
-  const blocks: Block[] = [];
-  let sumW = 0;
+  // Fordel hver stemmegruppe på radene i forhold til ledig plass igjen i hver rad.
+  const remaining = cap.slice();
+  const segments: Placement[][][] = Array.from({ length: rows }, () => []);
   for (const gid of orderedIds) {
     const list = byGroup
       .get(gid)!
@@ -115,52 +112,55 @@ export function autoSort(
         return sa.height - sb.height || sa.fullName.localeCompare(sb.fullName, "nb");
       });
     const n = list.length;
-    const base = Math.floor(n / rows);
-    const rem = n % rows;
-    const tiers: Placement[][] = [];
-    let idx = 0;
-    for (let t = 0; t < rows; t++) {
-      const size = base + (t >= rows - rem ? 1 : 0);
-      tiers.push(list.slice(idx, idx + size));
-      idx += size;
+    const total = remaining.reduce((a, b) => a + b, 0);
+    const give = remaining.map((c) => (total ? (n * c) / total : 0));
+    const take = give.map((g) => Math.floor(g));
+    let left = n - take.reduce((a, b) => a + b, 0);
+    const byFrac = give
+      .map((g, r) => ({ r, f: g - Math.floor(g) }))
+      .sort((a, b) => b.f - a.f || b.r - a.r);
+    for (const { r } of byFrac) {
+      if (left <= 0) break;
+      if (take[r] < remaining[r]) {
+        take[r]++;
+        left--;
+      }
     }
-    const width = Math.max(1, ...tiers.map((t) => t.length));
-    blocks.push({ gid, tiers, width, start: sumW });
-    sumW += width;
+    let idx = 0;
+    for (let r = 0; r < rows; r++) {
+      const part = list.slice(idx, idx + take[r]);
+      idx += take[r];
+      remaining[r] -= take[r];
+      if (part.length) segments[r].push(part);
+    }
   }
 
-  const C = Math.max(
-    1,
-    sumW,
-    Math.ceil(N / rows),
-    ...pinned.map((p) => p.slot + 1),
-  );
-
-  const occ = new Set<string>(pinned.map((p) => key(p.row, p.slot)));
+  // Bygg hver rad som en tett rekke: stemmegruppene i blokker, høyeste i midten av blokken.
   const assigned = new Map<number, { row: number; slot: number }>();
-  for (const b of blocks) {
-    b.tiers.forEach((tier, row) => {
-      const k = tier.length;
-      if (!k) return;
+  let C = 1;
+  for (let r = 0; r < rows; r++) {
+    const seq: Placement[] = [];
+    for (const part of segments[r]) {
+      const k = part.length;
       const positions = Array.from({ length: k }, (_, j) => j).sort(
-        (a, b2) =>
-          Math.abs(a - (k - 1) / 2) - Math.abs(b2 - (k - 1) / 2) || a - b2,
+        (a, b) => Math.abs(a - (k - 1) / 2) - Math.abs(b - (k - 1) / 2) || a - b,
       );
-      const tallFirst = tier.slice().sort((a, c) => {
-        const sa = sMap.get(a.singerId)!;
-        const sc = sMap.get(c.singerId)!;
-        return sc.height - sa.height;
+      const tallFirst = part.slice().sort((a, c) => {
+        return sMap.get(c.singerId)!.height - sMap.get(a.singerId)!.height;
       });
+      const block: Placement[] = new Array(k);
       tallFirst.forEach((p, i) => {
-        const j = positions[i];
-        const target = b.start + Math.round(((j + 0.5) * b.width) / k - 0.5);
-        const spot = claimNearest(occ, row, target, rows, C);
-        if (spot) {
-          occ.add(key(spot.row, spot.slot));
-          assigned.set(p.singerId, spot);
-        }
+        block[positions[i]] = p;
       });
-    });
+      seq.push(...block);
+    }
+    for (const p of pinned
+      .filter((q) => q.row === r)
+      .sort((a, b) => a.slot - b.slot)) {
+      seq.splice(Math.min(Math.max(p.slot, 0), seq.length), 0, p);
+    }
+    seq.forEach((p, i) => assigned.set(p.singerId, { row: r, slot: i }));
+    C = Math.max(C, seq.length);
   }
 
   const next = placements.map((p) => {
@@ -170,7 +170,31 @@ export function autoSort(
   return { placements: next, settings: { ...settings, rows, slots: C } };
 }
 
-/** Plasserer en sanger på nærmeste ledige plass ved sin (effektive) stemmegruppe. */
+/**
+ * Setter inn en sanger i en rad på en gitt posisjon og nummererer raden på nytt (0..n-1),
+ * slik at raden fortsatt er tett uten hull.
+ */
+function insertIntoRow(
+  placements: Placement[],
+  singerId: number,
+  row: number,
+  index: number,
+): Placement[] {
+  const inRow = placements
+    .filter((p) => p.singerId !== singerId && onGrid(p) && p.row === row)
+    .sort((a, b) => a.slot - b.slot);
+  const me = placements.find((p) => p.singerId === singerId)!;
+  const seq = inRow.map((p) => p.singerId);
+  seq.splice(Math.min(Math.max(index, 0), seq.length), 0, me.singerId);
+  const slotOf = new Map(seq.map((id, i) => [id, i]));
+  return placements.map((p) => {
+    if (p.singerId === singerId) return { ...p, row, slot: slotOf.get(singerId)!, status: p.status === "bench" ? "choir" : p.status };
+    if (slotOf.has(p.singerId)) return { ...p, slot: slotOf.get(p.singerId)! };
+    return p;
+  });
+}
+
+/** Plasserer en sanger inn i raden ved sin (effektive) stemmegruppe, uten å lage hull. */
 export function placeNearGroup(
   state: PlacementState,
   singerId: number,
@@ -182,45 +206,48 @@ export function placeNearGroup(
   if (!me || !singer) return state;
   const gid = effectiveGroupId(me, singer);
   const rows = Math.max(1, state.settings.rows);
-  let C = Math.max(1, state.settings.slots);
+  const order = sortedGroups(ctx.groups).map((g) => g.id);
+  const orderOf = (g: number) => {
+    const i = order.indexOf(g);
+    return i < 0 ? order.length : i;
+  };
 
   const others = state.placements.filter((q) => {
     const sg = sMap.get(q.singerId);
-    return sg && q.singerId !== singerId && onGrid(q) && effectiveGroupId(q, sg) === gid;
+    return sg && q.singerId !== singerId && onGrid(q);
   });
-  const heights = [...others.map((q) => sMap.get(q.singerId)!.height), singer.height].sort(
+  const sameGroup = others.filter((q) => effectiveGroupId(q, sMap.get(q.singerId)!) === gid);
+  const heights = [...sameGroup.map((q) => sMap.get(q.singerId)!.height), singer.height].sort(
     (a, b) => a - b,
   );
   const rank = heights.indexOf(singer.height);
   const pct = heights.length > 1 ? rank / (heights.length - 1) : 0.5;
-  const trow = Math.round(pct * (rows - 1));
-  const tcol = others.length
-    ? others.reduce((sum, q) => sum + q.slot, 0) / others.length
-    : (C - 1) / 2;
+  const trow = Math.min(rows - 1, Math.max(0, Math.round(pct * (rows - 1))));
 
-  const occ = occupiedSet(state.placements, singerId);
-  let best: { row: number; slot: number } | null = null;
-  let bestCost = Infinity;
-  for (let r = 0; r < rows; r++) {
-    for (let i = 0; i < C; i++) {
-      if (occ.has(key(r, i))) continue;
-      const cost = Math.abs(i - tcol) + 0.8 * Math.abs(r - trow);
-      if (cost < bestCost) {
-        bestCost = cost;
-        best = { row: r, slot: i };
-      }
-    }
+  const rowMembers = others.filter((q) => q.row === trow).sort((a, b) => a.slot - b.slot);
+  let index = rowMembers.length;
+  let lastSame = -1;
+  rowMembers.forEach((q, i) => {
+    if (effectiveGroupId(q, sMap.get(q.singerId)!) === gid) lastSame = i;
+  });
+  if (lastSame >= 0) {
+    index = lastSame + 1;
+  } else {
+    const mine = orderOf(gid);
+    const firstAfter = rowMembers.findIndex(
+      (q) => orderOf(effectiveGroupId(q, sMap.get(q.singerId)!)) > mine,
+    );
+    index = firstAfter < 0 ? rowMembers.length : firstAfter;
   }
-  if (!best) {
-    best = { row: trow, slot: C };
-    C += 1;
-  }
-  return {
-    placements: state.placements.map((p) =>
-      p.singerId === singerId ? { ...p, row: best!.row, slot: best!.slot } : p,
+
+  const placements = insertIntoRow(state.placements, singerId, trow, index);
+  const slots = Math.max(
+    1,
+    ...Array.from({ length: Math.max(rows, trow + 1) }, (_, r) =>
+      placements.filter((p) => onGrid(p) && p.row === r).length,
     ),
-    settings: { ...state.settings, slots: C },
-  };
+  );
+  return { placements, settings: { ...state.settings, rows: Math.max(rows, trow + 1), slots } };
 }
 
 /** Lag første oppstilling for gitte sangere. */

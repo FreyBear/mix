@@ -60,7 +60,23 @@ export function computeLayout(
   const active = items.filter((i) => i.status !== "bench");
   const placed = active.filter((i) => i.row >= 0 && i.slot >= 0);
   const rows = Math.max(1, settings.rows, ...placed.map((i) => i.row + 1));
-  const C = Math.max(1, settings.slots, ...placed.map((i) => i.slot + 1));
+
+  // Hver rad pakkes tett fra venstre mot høyre i rekkefølgen til de lagrede plassene,
+  // slik at det aldri blir hull i koret. Bare en solists «behold hull» holder av plass.
+  const rowEntries: LayoutItem[][] = Array.from({ length: rows }, (_, r) =>
+    placed
+      .filter(
+        (i) => i.row === r && (i.status === "choir" || (i.status === "solo" && settings.soloKeepGap)),
+      )
+      .sort((a, b) => a.slot - b.slot || a.singerId - b.singerId),
+  );
+  const C = Math.max(1, ...rowEntries.map((e) => e.length));
+  /** Effektiv (pakket) plassindeks for hver sanger, sentrert i raden. */
+  const effSlot = new Map<number, number>();
+  rowEntries.forEach((entries) => {
+    const start = (C - entries.length) / 2;
+    entries.forEach((it, rank) => effSlot.set(it.singerId, start + rank));
+  });
 
   const cw = (stageW * settings.choirWidthPct) / 100;
   const left = (stageW - cw) / 2;
@@ -114,20 +130,6 @@ export function computeLayout(
   }
   const shift = maxRaw - (stageD - MARGIN);
   const posY = (r: number, x: number) => rawY(r, x, rowSpacing) - shift;
-
-  // Rader der solistens plass trekkes sammen.
-  const compressRows = new Set<number>();
-  if (!settings.soloKeepGap) {
-    for (const it of placed) if (it.status === "solo") compressRows.add(it.row);
-  }
-  const effSlot = new Map<number, number>();
-  for (const r of compressRows) {
-    const inRow = placed
-      .filter((i) => i.status === "choir" && i.row === r)
-      .sort((a, b) => a.slot - b.slot);
-    const start = (C - inRow.length) / 2;
-    inRow.forEach((it, rank) => effSlot.set(it.singerId, start + rank));
-  }
 
   const nodes: LNode[] = [];
   for (const it of placed) {
@@ -183,23 +185,31 @@ export function computeLayout(
     });
   });
 
-  // Rutenett (for tomme plasser og treffsjekk).
-  const occ = new Map<string, LayoutItem>();
-  for (const it of placed) occ.set(`${it.row}:${it.slot}`, it);
+  // Rutenett: de pakkede plassene (inkl. solistens reserverte spor) pluss én tom
+  // «legg til»-plass rett etter siste sanger i hver rad (for tapp og dra-og-slipp).
   const gridSlots: LSlot[] = [];
   for (let r = 0; r < rows; r++) {
-    for (let i = 0; i < C; i++) {
-      const x = baseX(r, i);
-      const o = occ.get(`${r}:${i}`);
+    const entries = rowEntries[r];
+    for (const it of entries) {
+      const x = baseX(r, effSlot.get(it.singerId)!);
       gridSlots.push({
         row: r,
-        slot: i,
+        slot: it.slot,
         x,
         y: posY(r, x),
-        occupiedBy: o ? o.singerId : null,
-        reserved: !!o && o.status === "solo",
+        occupiedBy: it.singerId,
+        reserved: it.status === "solo",
       });
     }
+    const x = baseX(r, (C - entries.length) / 2 + entries.length);
+    gridSlots.push({
+      row: r,
+      slot: entries.length ? entries[entries.length - 1].slot + 1 : 0,
+      x,
+      y: posY(r, x),
+      occupiedBy: null,
+      reserved: false,
+    });
   }
 
   // Beregningene over regner y = 0 som scenekanten mot publikum. Lerretet tegner

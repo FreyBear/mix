@@ -122,12 +122,87 @@ test("amfi bøyer rader fremover i endene", () => {
 test("sikksakk forskyver annenhver rad", () => {
   const z = computeLayout(12, 7, { ...s1.settings, zigzag: true }, items(s1));
   const n = computeLayout(12, 7, { ...s1.settings, zigzag: false }, items(s1));
-  const slot00z = z.gridSlots.find((g) => g.row === 1 && g.slot === 0)!;
-  const slot00n = n.gridSlots.find((g) => g.row === 1 && g.slot === 0)!;
-  const row0z = z.gridSlots.find((g) => g.row === 0 && g.slot === 0)!;
-  assert.ok(slot00z.x > row0z.x + 0.3, "rad 1 er forskjøvet");
-  assert.ok(Math.abs(slot00n.x - n.gridSlots.find((g) => g.row === 0 && g.slot === 0)!.x) < 1e-9);
+  const first = (l: typeof z, row: number) =>
+    Math.min(...l.nodes.filter((nd) => nd.row === row).map((nd) => nd.x));
+  const shift0 = first(z, 0) - first(n, 0);
+  const shift1 = first(z, 1) - first(n, 1);
+  assert.ok(shift1 - shift0 > 0.3, "rad 2 er forskjøvet i forhold til rad 1");
 });
+
+/** Alle avstander mellom naboer i en rad skal være like (ingen hull). */
+function assertNoHoles(l: ReturnType<typeof computeLayout>, label: string) {
+  for (let r = 0; r < l.rows; r++) {
+    const xs = l.nodes
+      .filter((nd) => nd.zone === "choir" && nd.row === r)
+      .map((nd) => nd.x)
+      .sort((a, b) => a - b);
+    if (xs.length < 3) continue;
+    const gaps = xs.slice(1).map((x, i) => x - xs[i]);
+    assert.ok(Math.max(...gaps) - Math.min(...gaps) < 1e-6, `${label}: hull i rad ${r + 1}`);
+  }
+}
+
+test("ingen hull i oppstillingene (seed, alle bredder og former)", () => {
+  for (const sc of [s1, s2, s3]) {
+    for (const w of [40, 70, 90, 100]) {
+      for (const shape of ["rows", "arc"] as const) {
+        const l = computeLayout(12, 7, { ...sc.settings, soloKeepGap: false, choirWidthPct: w, shape }, items(sc));
+        assertNoHoles(l, `${sc.title} ${w}% ${shape}`);
+      }
+    }
+  }
+});
+
+test("auto-sortering gir jevnt fylte rader uten hull for alle koretørrelser", () => {
+  for (let n = 1; n <= 60; n++) {
+    const ids = singers.filter((s) => s.isActive).slice(0, Math.min(n, 32)).map((s) => s.id);
+    const extra = n > 32 ? singers.slice(0, n - 32).map((s) => s.id) : [];
+    const state = autoSort(
+      [...new Set([...ids, ...extra])].map((id) => ({
+        singerId: id,
+        row: -1,
+        slot: -1,
+        status: "choir" as const,
+        pinned: false,
+        overrideGroupId: null,
+      })),
+      DEFAULT_SETTINGS,
+      ctx,
+    );
+    const perRow = new Map<number, number[]>();
+    for (const p of state.placements) {
+      if (!perRow.has(p.row)) perRow.set(p.row, []);
+      perRow.get(p.row)!.push(p.slot);
+    }
+    const sizes = [...perRow.values()].map((v) => v.length);
+    assert.ok(Math.max(...sizes) - Math.min(...sizes) <= 1, `jevne rader for ${n}: ${sizes}`);
+    for (const slots of perRow.values()) {
+      const sorted = [...slots].sort((a, b) => a - b);
+      assert.deepEqual(sorted, sorted.map((_, i) => i), `tette plasser for ${n}`);
+    }
+    assertNoHoles(computeLayout(12, 7, state.settings, state.placements), `n=${n}`);
+  }
+});
+
+test("hull oppstår ikke etter benk, fravær, stemmebytte og tilbakeføring", () => {
+  let state = { placements: s1.placements, settings: s1.settings };
+  const ids = state.placements.map((p) => p.singerId);
+  for (const id of [ids[3], ids[10], ids[17], ids[24]]) state = toggleBench(state, id, ctx).state;
+  assertNoHoles(computeLayout(12, 7, state.settings, state.placements), "etter benk");
+  for (const id of [ids[10], ids[3]]) state = toggleBench(state, id, ctx).state;
+  assertNoHoles(computeLayout(12, 7, state.settings, state.placements), "etter retur fra benk");
+  const tenor = groups.find((g) => g.abbr === "T")!;
+  const bass = groups.find((g) => g.abbr === "B")!;
+  const someBass = singers.find((s) => s.voiceGroupId === bass.id)!;
+  state = setOverride(state, someBass.id, tenor.id, ctx).state;
+  assertNoHoles(computeLayout(12, 7, state.settings, state.placements), "etter stemmebytte");
+  const attending = new Set(ids.filter((_, i) => i % 5 !== 0));
+  state = reconcile(state, attending, ctx);
+  assertNoHoles(computeLayout(12, 7, state.settings, state.placements), "etter fravær");
+  const back = reconcile(state, new Set(ids), ctx);
+  assertNoHoles(computeLayout(12, 7, back.settings, back.placements), "etter at alle er tilbake");
+});
+
 
 test("kollisjon oppdages når sangere står for tett", () => {
   const dense = computeLayout(

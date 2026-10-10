@@ -89,7 +89,7 @@ export const DEFAULT_SETTINGS: SceneSettings = {
   rows: 3,
   slots: 10,
   soloLayout: "center",
-  soloKeepGap: true,
+  soloKeepGap: false,
 };
 
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
@@ -110,7 +110,7 @@ export function sanitizeSettings(raw: unknown): SceneSettings {
     slots: clamp(Math.round(num(r.slots, d.slots)), 1, 60),
     soloLayout:
       r.soloLayout === "spread" || r.soloLayout === "pairs" ? r.soloLayout : "center",
-    soloKeepGap: r.soloKeepGap !== false,
+    soloKeepGap: r.soloKeepGap === true,
   };
 }
 
