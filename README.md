@@ -19,7 +19,7 @@ Brukergrensesnittet er på norsk bokmål.
 **For dirigenten** (PIN-beskyttet)
 - Redigering på fire måter: trykk-for-å-bytte, dra-og-slipp, hurtigmeny (solo, benk, lås, bytt stemmegruppe) og reservebenk
 - Auto-sortering (høyde, høyeste bakerst, stemmegrupper i blokker, låste plasser beholdes). Radene fylles tett og jevnt, så det aldri blir hull i koret (solistens plass kan valgfritt holdes av som tomt spor)
-- Form: rette rader eller bue/amfi (radius-slider), korbredde 30–100 % (standard 90 %), sikksakk-forskyvning, antall rader
+- Form: én slider for bue/amfi (helt til venstre = rette rader), korbredde 30–100 % (standard 90 %), sikksakk-forskyvning, antall rader
 - Kollisjonsadvarsel (rød ring) og varsel om sangere utenfor scenen
 - Flere sanger per konsert: kopier forrige, maler, solister (midt / fordelt / par; behold eller lukk hull)
 - Midlertidig stemmegruppe («Synger B (Fast: T)») med opprinnelig farge, stiplet kant og stjerne

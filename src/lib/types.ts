@@ -39,7 +39,7 @@ export interface SceneSettings {
   /** Korets maksimale bredde i prosent av scenen (30-100). */
   choirWidthPct: number;
   shape: Shape;
-  /** Amfi-krumning 0 (slak) - 100 (krapp). */
+  /** Bue/amfi-krumning: 0 = rette rader, opp til 100 (krapp). `shape` utledes fra denne. */
   arc: number;
   /** Forskyv annenhver rad en halv plassbredde. */
   zigzag: boolean;
@@ -83,7 +83,7 @@ export interface Template {
 export const DEFAULT_SETTINGS: SceneSettings = {
   choirWidthPct: 90,
   shape: "rows",
-  arc: 35,
+  arc: 0,
   zigzag: false,
   rowsAuto: true,
   rows: 3,
@@ -100,10 +100,12 @@ const num = (v: unknown, fallback: number) =>
 export function sanitizeSettings(raw: unknown): SceneSettings {
   const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
   const d = DEFAULT_SETTINGS;
+  // Eldre data hadde en egen bryter for rette rader; «rows» betyr da arc = 0.
+  const arc = r.shape === "rows" ? 0 : clamp(Math.round(num(r.arc, d.arc)), 0, 100);
   return {
     choirWidthPct: clamp(Math.round(num(r.choirWidthPct, d.choirWidthPct)), 30, 100),
-    shape: r.shape === "arc" ? "arc" : "rows",
-    arc: clamp(Math.round(num(r.arc, d.arc)), 0, 100),
+    shape: arc > 0 ? "arc" : "rows",
+    arc,
     zigzag: r.zigzag === true,
     rowsAuto: r.rowsAuto !== false,
     rows: clamp(Math.round(num(r.rows, d.rows)), 1, 10),

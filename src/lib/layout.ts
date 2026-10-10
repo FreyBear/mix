@@ -87,7 +87,7 @@ export function computeLayout(
     left + s * (i + 0.5) + (zig && r % 2 === 1 ? s / 2 : 0);
 
   const hasSolos = active.some((i) => i.status === "solo");
-  const arcOn = settings.shape === "arc" && settings.arc > 0;
+  const arcOn = settings.arc > 0;
   const R0 = arcOn ? cw * (3 - (2.5 * settings.arc) / 100) : Infinity;
   const rawY = (r: number, x: number, rs: number) => {
     if (!arcOn) return r * rs;

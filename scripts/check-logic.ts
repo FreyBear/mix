@@ -110,8 +110,8 @@ test("korbredde-slider begrenser bredden", () => {
 });
 
 test("amfi bøyer rader fremover i endene", () => {
-  const straight = computeLayout(12, 7, { ...s1.settings, shape: "rows" }, items(s1));
-  const arc = computeLayout(12, 7, { ...s1.settings, shape: "arc", arc: 80 }, items(s1));
+  const straight = computeLayout(12, 7, { ...s1.settings, arc: 0 }, items(s1));
+  const arc = computeLayout(12, 7, { ...s1.settings, arc: 80 }, items(s1));
   const rowY = (l: typeof arc, r: number, pick: "min" | "max") => {
     const xs = l.nodes.filter((n) => n.row === r).sort((a, b) => a.x - b.x);
     return pick === "min" ? xs[0].y : xs[Math.floor(xs.length / 2)].y;
@@ -147,7 +147,7 @@ test("ingen hull i oppstillingene (seed, alle bredder og former)", () => {
   for (const sc of [s1, s2, s3]) {
     for (const w of [40, 70, 90, 100]) {
       for (const shape of ["rows", "arc"] as const) {
-        const l = computeLayout(12, 7, { ...sc.settings, soloKeepGap: false, choirWidthPct: w, shape }, items(sc));
+        const l = computeLayout(12, 7, { ...sc.settings, soloKeepGap: false, choirWidthPct: w, arc: shape === "arc" ? 60 : 0 }, items(sc));
         assertNoHoles(l, `${sc.title} ${w}% ${shape}`);
       }
     }
@@ -393,7 +393,7 @@ test("alle solo-oppsett og rader/amfi-kombinasjoner gir gyldig layout", () => {
   for (const shape of ["rows", "arc"] as const) {
     for (const zigzag of [false, true]) {
       for (const pct of [30, 60, 90, 100]) {
-        const l = computeLayout(8, 5, { ...DEFAULT_SETTINGS, shape, zigzag, choirWidthPct: pct, arc: 100 }, items(s1));
+        const l = computeLayout(8, 5, { ...DEFAULT_SETTINGS, zigzag, choirWidthPct: pct, arc: shape === "arc" ? 100 : 0 }, items(s1));
         assert.equal(l.nodes.length, 32);
         assert.ok(l.nodes.every((n) => Number.isFinite(n.x) && Number.isFinite(n.y)));
       }

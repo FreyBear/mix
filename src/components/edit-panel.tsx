@@ -140,31 +140,10 @@ export function EditPanel(p: Props) {
             />
           </div>
 
-          <div role="radiogroup" aria-label="Radform" className="grid grid-cols-2 gap-1 rounded-lg bg-surface2 p-1">
-            {(
-              [
-                ["rows", "Rette rader"],
-                ["arc", "Bue / amfi"],
-              ] as const
-            ).map(([val, label]) => (
-              <button
-                key={val}
-                role="radio"
-                aria-checked={s.shape === val}
-                onClick={() => p.onSettings({ shape: val })}
-                className={`rounded-md px-3 py-2 text-sm font-medium ${
-                  s.shape === val ? "bg-surface shadow-sm" : "text-muted"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-
-          <div className={s.shape === "arc" ? "" : "opacity-50"}>
+          <div>
             <label className="label flex justify-between" htmlFor="arc">
-              <span>Amfi-radius (slak → krapp)</span>
-              <span className="font-semibold text-fg">{s.arc}</span>
+              <span>Bue / amfi (til venstre = rette rader)</span>
+              <span className="font-semibold text-fg">{s.arc === 0 ? "Rette rader" : s.arc}</span>
             </label>
             <input
               id="arc"
@@ -172,9 +151,11 @@ export function EditPanel(p: Props) {
               min={0}
               max={100}
               step={1}
-              disabled={s.shape !== "arc"}
               value={s.arc}
-              onChange={(e) => p.onSettings({ arc: Number(e.target.value) })}
+              onChange={(e) => {
+                const arc = Number(e.target.value);
+                p.onSettings({ arc, shape: arc > 0 ? "arc" : "rows" });
+              }}
             />
           </div>
 
