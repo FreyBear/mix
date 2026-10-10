@@ -44,7 +44,8 @@ export function SingerCard({
         <div className="min-w-0 flex-1">
           <div className="truncate text-base font-semibold">{singer.fullName}</div>
           <div className="text-sm text-muted">
-            «{singer.nickname}» · {home?.name ?? "Ukjent stemmegruppe"} · {singer.height} cm
+            {home?.name ?? "Ukjent stemmegruppe"}
+            {singer.height > 0 ? ` · ${singer.height} cm` : ""}
           </div>
           {lent && <div className="mt-0.5 text-sm font-medium text-amber-600 dark:text-amber-400">★ {lent}</div>}
           <div className="mt-0.5 text-sm">{positionText}</div>

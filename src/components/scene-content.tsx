@@ -376,15 +376,17 @@ function NodeShape(p: NodeShapeProps) {
         )}
         {p.lod === "detail" && (
           <>
-            <text y={-5} fontSize={detailNameFont}>
+            <text y={p.singer.height > 0 ? -5 : -2} fontSize={detailNameFont}>
               {nick}
             </text>
-            <text y={5} fontSize={p.lent ? lentFont : 7.5} fontWeight={600}>
+            <text y={p.singer.height > 0 ? 5 : 9} fontSize={p.lent ? lentFont : 7.5} fontWeight={600}>
               {p.lent ? p.lentText : p.groupAbbr}
             </text>
-            <text y={14} fontSize={7} fontWeight={500} opacity={0.9}>
-              {p.singer.height} cm
-            </text>
+            {p.singer.height > 0 && (
+              <text y={14} fontSize={7} fontWeight={500} opacity={0.9}>
+                {p.singer.height} cm
+              </text>
+            )}
           </>
         )}
       </g>
