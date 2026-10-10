@@ -430,7 +430,7 @@ function Viewer({
       if (!scene || !ctx) return;
       const next = { ...scene.settings, ...patchSettings };
       if ("rows" in patchSettings || "rowsAuto" in patchSettings) {
-        const res = autoSort(scene.placements, next, ctx);
+        const res = autoSort(scene.placements, next, ctx, scene.settings.rows);
         applyState(res);
       } else {
         commitScene(scene.id, (s) => ({ ...s, settings: next }));

@@ -40,18 +40,23 @@ function occupiedSet(placements: Placement[], except?: number): Set<string> {
   return set;
 }
 
-/** Sorterer korister etter stemmegruppe (blokker fra venstre) og høyde (høyest bakerst). */
+/**
+ * Sorterer korister etter stemmegruppe (blokker fra venstre) og høyde (høyest bakerst).
+ *
+ * Endres antall rader, følger låste sangere sin kant: låst på forreste rad blir på forreste rad,
+ * låst på bakerste rad blir på bakerste rad, og låst i en midtrad mister låsen.
+ * `prevRows` er antall rader før endringen (utledes ellers fra oppstillingen).
+ */
 export function autoSort(
   placements: Placement[],
   settings: SceneSettings,
   ctx: PlacementCtx,
+  prevRows?: number,
 ): PlacementState {
   const sMap = new Map(ctx.singers.map((s) => [s.id, s]));
-  const members = placements.filter((p) => p.status !== "bench" && sMap.has(p.singerId));
-  const pinned = members.filter((p) => p.pinned && onGrid(p));
-  const free = members.filter((p) => !pinned.includes(p));
-  const N = members.length;
-  const hasSolos = members.some((p) => p.status === "solo");
+  const members0 = placements.filter((p) => p.status !== "bench" && sMap.has(p.singerId));
+  const N = members0.length;
+  const hasSolos = members0.some((p) => p.status === "solo");
 
   const cw = (ctx.stageW * settings.choirWidthPct) / 100;
   let rows: number;
@@ -64,8 +69,24 @@ export function autoSort(
     );
     rows = Math.min(rows, maxRows);
   } else {
-    rows = settings.rows;
+    rows = Math.max(1, settings.rows);
   }
+
+  const oldRows = Math.max(
+    1,
+    prevRows ?? settings.rows,
+    ...members0.filter(onGrid).map((p) => p.row + 1),
+  );
+  const unpinned = new Set<number>();
+  const members = members0.map((p) => {
+    if (!(p.pinned && onGrid(p)) || rows === oldRows) return p;
+    if (p.row === 0) return p; // forreste rad forblir forreste rad
+    if (p.row === oldRows - 1) return { ...p, row: rows - 1 }; // bakerste forblir bakerst
+    unpinned.add(p.singerId);
+    return { ...p, pinned: false };
+  });
+  const pinned = members.filter((p) => p.pinned && onGrid(p));
+  const free = members.filter((p) => !pinned.includes(p));
   rows = Math.max(rows, ...pinned.map((p) => p.row + 1), 1);
 
   // Radstørrelser: jevnt fordelt (bakerste rader får evt. én ekstra), så alle rader er
@@ -165,7 +186,8 @@ export function autoSort(
 
   const next = placements.map((p) => {
     const a = assigned.get(p.singerId);
-    return a ? { ...p, row: a.row, slot: a.slot } : p;
+    const base = unpinned.has(p.singerId) ? { ...p, pinned: false } : p;
+    return a ? { ...base, row: a.row, slot: a.slot } : base;
   });
   return { placements: next, settings: { ...settings, rows, slots: C } };
 }

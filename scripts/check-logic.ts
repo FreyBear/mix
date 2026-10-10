@@ -205,6 +205,34 @@ test("hull oppstår ikke etter benk, fravær, stemmebytte og tilbakeføring", ()
 });
 
 
+test("låste sangere følger forreste/bakerste rad når antall rader endres; midtrad mister låsen", () => {
+  let st = autoSort(s1.placements, { ...s1.settings, rowsAuto: false, rows: 3 }, ctx, 3);
+  const rowOf = (state: typeof st, id: number) => state.placements.find((p) => p.singerId === id)!;
+  const pick = (row: number) => st.placements.find((p) => p.row === row)!.singerId;
+  const front = pick(0), mid = pick(1), back = pick(2);
+  st = {
+    ...st,
+    placements: st.placements.map((p) =>
+      [front, mid, back].includes(p.singerId) ? { ...p, pinned: true } : p,
+    ),
+  };
+  const sort = (rows: number, prev: number) =>
+    autoSort(st.placements, { ...st.settings, rowsAuto: false, rows }, ctx, prev);
+  for (const rows of [2, 5, 1, 4]) {
+    const r = sort(rows, 3);
+    assert.equal(rowOf(r, front).row, 0, `forrest forblir forrest (${rows} rader)`);
+    assert.equal(rowOf(r, front).pinned, true);
+    assert.equal(rowOf(r, back).row, rows - 1, `bakerst forblir bakerst (${rows} rader)`);
+    assert.equal(rowOf(r, back).pinned, true);
+    assert.equal(rowOf(r, mid).pinned, false, `midtrad mister låsen (${rows} rader)`);
+    assertNoHoles(computeLayout(12, 7, r.settings, r.placements), `${rows} rader`);
+  }
+  // Uendret antall rader: alle låser består.
+  const same = sort(3, 3);
+  assert.ok([front, mid, back].every((id) => rowOf(same, id).pinned));
+  assert.equal(rowOf(same, mid).row, 1);
+});
+
 test("kollisjon oppdages når sangere står for tett", () => {
   const dense = computeLayout(
     12,
