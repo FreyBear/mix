@@ -130,18 +130,37 @@ test("sikksakk forskyver annenhver rad", () => {
   assert.ok(shift1 - shift0 > 0.3, "rad 2 er forskjøvet i forhold til rad 1");
 });
 
-/** Alle avstander mellom naboer i en rad skal være like (ingen hull). */
+/** Avstanden mellom naboer i en rad (langs raden) skal være lik overalt (ingen hull). */
 function assertNoHoles(l: ReturnType<typeof computeLayout>, label: string) {
   for (let r = 0; r < l.rows; r++) {
-    const xs = l.nodes
+    const ns = l.nodes
       .filter((nd) => nd.zone === "choir" && nd.row === r)
-      .map((nd) => nd.x)
-      .sort((a, b) => a - b);
-    if (xs.length < 3) continue;
-    const gaps = xs.slice(1).map((x, i) => x - xs[i]);
+      .sort((a, b) => a.x - b.x);
+    if (ns.length < 3) continue;
+    const gaps = ns.slice(1).map((n, i) => Math.hypot(n.x - ns[i].x, n.y - ns[i].y));
     assert.ok(Math.max(...gaps) - Math.min(...gaps) < 1e-6, `${label}: hull i rad ${r + 1}`);
   }
 }
+
+test("bue: lik avstand langs kurven, også i endene, og bredden holdes", () => {
+  const rowsOf = (l: ReturnType<typeof computeLayout>, r: number) =>
+    l.nodes.filter((n) => n.row === r).sort((a, b) => a.x - b.x);
+  for (const arc of [20, 60, 100]) {
+    const l = computeLayout(12, 7, { ...s1.settings, arc, choirWidthPct: 90 }, items(s1));
+    for (let r = 0; r < l.rows; r++) {
+      const ns = rowsOf(l, r);
+      const d = ns.slice(1).map((n, i) => Math.hypot(n.x - ns[i].x, n.y - ns[i].y));
+      assert.ok(Math.max(...d) - Math.min(...d) < 1e-6, `jevn avstand arc=${arc} rad ${r + 1}`);
+    }
+    const xs = l.nodes.map((n) => n.x);
+    assert.ok(Math.max(...xs) - Math.min(...xs) <= 12 * 0.9 + 1e-6, `bredde arc=${arc}`);
+  }
+  // Maks bue er en halvsirkel: endene ligger på samme høyde som sirkelens midtpunkt.
+  const full = computeLayout(12, 7, { ...s1.settings, arc: 100 }, items(s1));
+  const back = full.nodes.filter((n) => n.row === full.rows - 1).sort((a, b) => a.x - b.x);
+  const mid = back[Math.floor(back.length / 2)];
+  assert.ok(back[0].y - mid.y > 3, "endene er langt foran midten ved maks bue");
+});
 
 test("ingen hull i oppstillingene (seed, alle bredder og former)", () => {
   for (const sc of [s1, s2, s3]) {

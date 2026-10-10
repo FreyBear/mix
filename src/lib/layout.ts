@@ -83,17 +83,27 @@ export function computeLayout(
   const cx = stageW / 2;
   const zig = settings.zigzag;
   const s = cw / (C + (zig ? 0.5 : 0));
-  const baseX = (r: number, i: number) =>
-    left + s * (i + 0.5) + (zig && r % 2 === 1 ? s / 2 : 0);
+  /** Posisjon langs raden som andel 0..1 av korbredden (sikksakk forskyver annenhver rad). */
+  const fracOf = (r: number, i: number) =>
+    (s * (i + 0.5) + (zig && r % 2 === 1 ? s / 2 : 0)) / cw;
 
   const hasSolos = active.some((i) => i.status === "solo");
+  // Bue: hver rad er en sirkelbue rundt midten av scenekanten mot publikum. Sangerne står med
+  // lik avstand langs buen (ikke lik avstand sideveis), så avstanden holder seg jevn i endene.
+  // arc 0 = rette rader, 100 = halvsirkel. Bakerste rad får bredden `cw`.
   const arcOn = settings.arc > 0;
-  const R0 = arcOn ? cw * (3 - (2.5 * settings.arc) / 100) : Infinity;
-  const rawY = (r: number, x: number, rs: number) => {
-    if (!arcOn) return r * rs;
-    const R = R0 + r * rs;
-    const dx = x - cx;
-    return Math.sqrt(Math.max(R * R - dx * dx, 0));
+  const theta = arcOn ? (settings.arc / 100) * Math.PI : 0;
+  const Rb = arcOn ? cw / (2 * Math.sin(theta / 2)) : Infinity;
+  // Forreste rad får ikke mindre radius enn at plassene langs buen er minst ~0,62 m.
+  const Rmin = arcOn ? Math.max(0.5, (C * 0.62) / theta) : 0;
+  const radialFor = (rs: number) =>
+    rows > 1 ? Math.max(0.5, Math.min(rs, (Rb - Rmin) / (rows - 1))) : rs;
+  const pos = (r: number, i: number, rs: number) => {
+    const f = fracOf(r, i);
+    if (!arcOn) return { x: left + f * cw, y: r * rs };
+    const R = Rb - (rows - 1 - r) * radialFor(rs);
+    const th = (f - 0.5) * theta;
+    return { x: cx + R * Math.sin(th), y: R * Math.cos(th) };
   };
 
   const avail = stageD - 2 * MARGIN - (hasSolos ? SOLO_GAP : 0);
@@ -102,7 +112,7 @@ export function computeLayout(
     let hi = -Infinity;
     for (const r of [0, rows - 1]) {
       for (const i of [0, Math.floor((C - 1) / 2), C - 1]) {
-        const y = rawY(r, baseX(r, i), rs);
+        const y = pos(r, i, rs).y;
         lo = Math.min(lo, y);
         hi = Math.max(hi, y);
       }
@@ -125,21 +135,24 @@ export function computeLayout(
   let maxRaw = -Infinity;
   for (let r = 0; r < rows; r++) {
     for (let i = 0; i < C; i++) {
-      maxRaw = Math.max(maxRaw, rawY(r, baseX(r, i), rowSpacing));
+      maxRaw = Math.max(maxRaw, pos(r, i, rowSpacing).y);
     }
   }
   const shift = maxRaw - (stageD - MARGIN);
-  const posY = (r: number, x: number) => rawY(r, x, rowSpacing) - shift;
+  const place = (r: number, i: number) => {
+    const p = pos(r, i, rowSpacing);
+    return { x: p.x, y: p.y - shift };
+  };
 
   const nodes: LNode[] = [];
   for (const it of placed) {
     if (it.status !== "choir") continue;
     const eff = effSlot.get(it.singerId) ?? it.slot;
-    const x = baseX(it.row, eff);
+    const pl = place(it.row, eff);
     nodes.push({
       singerId: it.singerId,
-      x,
-      y: posY(it.row, x),
+      x: pl.x,
+      y: pl.y,
       zone: "choir",
       row: it.row,
       slot: it.slot,
@@ -191,22 +204,22 @@ export function computeLayout(
   for (let r = 0; r < rows; r++) {
     const entries = rowEntries[r];
     for (const it of entries) {
-      const x = baseX(r, effSlot.get(it.singerId)!);
+      const pl = place(r, effSlot.get(it.singerId)!);
       gridSlots.push({
         row: r,
         slot: it.slot,
-        x,
-        y: posY(r, x),
+        x: pl.x,
+        y: pl.y,
         occupiedBy: it.singerId,
         reserved: it.status === "solo",
       });
     }
-    const x = baseX(r, (C - entries.length) / 2 + entries.length);
+    const end = place(r, (C - entries.length) / 2 + entries.length);
     gridSlots.push({
       row: r,
       slot: entries.length ? entries[entries.length - 1].slot + 1 : 0,
-      x,
-      y: posY(r, x),
+      x: end.x,
+      y: end.y,
       occupiedBy: null,
       reserved: false,
     });
