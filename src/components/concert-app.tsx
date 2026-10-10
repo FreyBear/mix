@@ -848,9 +848,6 @@ function Viewer({
             </div>
 
             <div className="absolute top-2 left-2 flex flex-col items-start gap-2">
-              <span className="chip bg-surface/90 backdrop-blur">
-                {mirror ? "Sett fra scenen" : "Sett fra salen"}
-              </span>
               {warnings.length > 0 && (
                 <button
                   className="chip border-danger/50 bg-surface/90 text-danger backdrop-blur"
