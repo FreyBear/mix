@@ -1,0 +1,19 @@
+services:
+  mixup:
+    build: .
+    image: mixup:latest
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      # Dirigentens PIN-kode. Bytt denne!
+      ADMIN_PIN: "${ADMIN_PIN:-1234}"
+      # Hemmelighet for innloggings-cookie (valgfritt, men anbefalt).
+      SESSION_SECRET: "${SESSION_SECRET:-}"
+      # Sett til true hvis appen står bak HTTPS.
+      COOKIE_SECURE: "${COOKIE_SECURE:-false}"
+    volumes:
+      - mixup-data:/app/data
+
+volumes:
+  mixup-data:

@@ -1,0 +1,161 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #f4f5f8;
+  --surface: #ffffff;
+  --surface-2: #eef0f5;
+  --fg: #0f172a;
+  --muted: #64748b;
+  --line: #dde1ea;
+  --accent: #4f46e5;
+  --accent-fg: #ffffff;
+  --stage: #fbfaf6;
+  --stage-line: #b9c0cd;
+  --grid: #e7e5de;
+  --danger: #dc2626;
+  --me: #d946ef;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0b0f17;
+    --surface: #151b27;
+    --surface-2: #1d2535;
+    --fg: #e8ecf4;
+    --muted: #93a0b8;
+    --line: #28324a;
+    --accent: #818cf8;
+    --accent-fg: #0b0f17;
+    --stage: #1a2130;
+    --stage-line: #3b4863;
+    --grid: #232c3f;
+    --danger: #f87171;
+    --me: #f0abfc;
+  }
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface2: var(--surface-2);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --color-accent-fg: var(--accent-fg);
+  --color-danger: var(--danger);
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+    "Noto Sans", sans-serif;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-2 text-sm font-medium text-fg transition-colors select-none hover:bg-surface2 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply border-transparent bg-accent text-accent-fg hover:bg-accent/90;
+  }
+  .btn-danger {
+    @apply border-transparent bg-danger text-white hover:bg-danger/90;
+  }
+  .btn-ghost {
+    @apply border-transparent bg-transparent hover:bg-surface2;
+  }
+  .btn-icon {
+    @apply inline-flex h-10 w-10 items-center justify-center rounded-lg border border-line bg-surface text-fg shadow-sm transition-colors select-none hover:bg-surface2 active:scale-95 disabled:opacity-40;
+  }
+  .input {
+    @apply w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-fg placeholder:text-muted focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30;
+  }
+  .label {
+    @apply mb-1 block text-xs font-medium text-muted;
+  }
+  .card {
+    @apply rounded-xl border border-line bg-surface shadow-sm;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1 rounded-full border border-line bg-surface2 px-2 py-0.5 text-xs;
+  }
+}
+
+/* Pulserende ring rundt «meg selv» i SVG-scenen. */
+@keyframes pulse-ring {
+  0% {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(1.9);
+    opacity: 0;
+  }
+}
+.pulse-ring {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: pulse-ring 1.6s ease-out infinite;
+}
+
+input[type="range"] {
+  accent-color: var(--accent);
+  width: 100%;
+}
+
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.print-only {
+  display: none;
+}
+
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 12mm;
+  }
+  :root {
+    --bg: #ffffff;
+    --surface: #ffffff;
+    --surface-2: #eef0f5;
+    --fg: #0f172a;
+    --muted: #475569;
+    --line: #cbd5e1;
+    --accent: #4f46e5;
+    --stage: #ffffff;
+    --stage-line: #64748b;
+    --grid: #e2e8f0;
+  }
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  html,
+  body {
+    height: auto;
+    background: #fff !important;
+    color: #000 !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print-only {
+    display: block !important;
+  }
+  .print-sheet svg {
+    width: 100%;
+    height: auto;
+  }
+}
