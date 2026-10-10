@@ -26,7 +26,7 @@ Brukergrensesnittet er på norsk bokmål.
 - Oppmøteliste per konsert: de som er borte forsvinner fra oppstillingen, og kommer tilbake på sin plass
 
 **Administrasjon** (`/admin`)
-- Stemmegrupper med egne farger (fargevelger) og profiler SATB / SSAA / TTBB
+- Stemmegrupper med egne farger (fargevelger) og profiler SATB / SSAA / TTBB / S1 S2 A1 A2 T1 T2 B1 B2 (importen godtar «S1», «s 1», «Sopran 1» osv.)
 - Sangere: opprett, rediger, slett, import fra CSV/tekst
 - Lokasjoner (scenebredde/-dybde), konserter, sikkerhetskopi (JSON) og gjenoppretting
 

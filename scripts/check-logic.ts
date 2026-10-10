@@ -27,6 +27,7 @@ import {
 import { createBackup, restoreBackup } from "../src/lib/backup";
 import { parseSingerImport } from "../src/lib/singer-import";
 import { DEFAULT_SETTINGS } from "../src/lib/types";
+import { VOICE_PROFILES } from "../src/lib/profiles";
 
 let passed = 0;
 function test(name: string, fn: () => void) {
@@ -327,6 +328,26 @@ test("backup og gjenoppretting gir identiske data", () => {
   const after = JSON.stringify({ ...createBackup(other), exportedAt: "" });
   assert.equal(after, before);
   assert.throws(() => restoreBackup(other, { app: "annet" }));
+});
+
+test("import: delte stemmegrupper S1 S2 A1 A2 T1 T2 B1 B2", () => {
+  const eight = VOICE_PROFILES.SSAATTBB.groups.map((g, i) => ({ id: 100 + i, name: g.name, abbr: g.abbr, color: g.color, sortOrder: i }));
+  const text = [
+    "Navn;Kallenavn;Stemmegruppe;Høyde",
+    "Anne Berg;Anne;S1;165",
+    "Bodil Vik;Bodil;s 2;160",
+    "Cecilie Dahl;Cecilie;Alt 1;168",
+    "Dina Moe;Dina;A-2;170",
+    "Egil Ness;Egil;T1;180",
+    "Frode Lie;Frode;Tenor 2;182",
+    "Geir Ro;Geir;b1;185",
+    "Hans Ås;Hans;Bass2;190",
+    "Ida Fjell;Ida;S3;160",
+  ].join("\n");
+  const r = parseSingerImport(text, eight);
+  assert.equal(r.rows.length, 8);
+  assert.deepEqual(r.rows.map((x) => x.voiceGroupId), [100, 101, 102, 103, 104, 105, 106, 107]);
+  assert.equal(r.skipped.length, 1);
 });
 
 test("import: CSV med overskrift og ren tekst", () => {

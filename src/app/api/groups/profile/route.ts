@@ -36,6 +36,17 @@ export async function POST(req: Request) {
       if (existing.has(g.abbr.toLowerCase())) continue;
       add.run(g.name, g.abbr, g.color, n++);
     }
+    // Profilens grupper først, i profilens rekkefølge; øvrige grupper beholder rekkefølgen etter dem.
+    const all = listGroups(db);
+    const rank = new Map(profile.groups.map((g, i) => [g.abbr.toLowerCase(), i]));
+    const sorted = [...all].sort((a, c) => {
+      const ra = rank.get(a.abbr.toLowerCase()) ?? Infinity;
+      const rc = rank.get(c.abbr.toLowerCase()) ?? Infinity;
+      if (ra !== rc) return ra - rc;
+      return a.sortOrder - c.sortOrder || a.id - c.id;
+    });
+    const upd = db.prepare("UPDATE voice_groups SET sort_order = ? WHERE id = ?");
+    sorted.forEach((g, i) => upd.run(i, g.id));
   })();
   return ok({ groups: listGroups(db) });
 }

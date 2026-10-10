@@ -84,10 +84,12 @@ export function parseSingerImport(text: string, groups: VoiceGroup[]): ImportRes
     startIdx = 1;
   }
 
+  // «S1», «s 1», «S-1», «Sopran 1» og «sopran1» regnes alle som samme gruppe.
+  const norm = (t: string) => t.toLowerCase().replace(/[\s\-_.]+/g, "");
   const byKey = new Map<string, number>();
   for (const g of groups) {
-    byKey.set(g.abbr.toLowerCase(), g.id);
-    byKey.set(g.name.toLowerCase(), g.id);
+    byKey.set(norm(g.abbr), g.id);
+    byKey.set(norm(g.name), g.id);
   }
 
   let lineNo = 0;
@@ -109,7 +111,7 @@ export function parseSingerImport(text: string, groups: VoiceGroup[]): ImportRes
       continue;
     }
     const voice = get("voice");
-    const groupId = byKey.get(voice.toLowerCase());
+    const groupId = byKey.get(norm(voice));
     if (!groupId) {
       result.skipped.push({
         line: lineNo,
