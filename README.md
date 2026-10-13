@@ -9,28 +9,32 @@ Brukergrensesnittet er på norsk bokmål.
 ## Funksjoner
 
 **For sangere (åpen tilgang)**
-- «Hvem er du?» (lagres i nettleseren), og «meg selv» utheves med pulserende ring og navnelapp
-- Fast bunnlinje med rad, plass fra venstre og stemmegruppe, med sangvelger og forrige/neste
-- Zoombart og panorerbart lerret (klyp, musehjul, dra) med *semantisk zoom*: initialer langt unna, kallenavn, stemme og høyde når du zoomer inn
-- Mørk modus og utskriftsvennlig visning
-- Installerbar (PWA) og fungerer uten nett etter første besøk
-- Personvern: Sangerhøyder eksponeres kun for innlogget dirigent/admin
+- **Alltid neste konsert:** Koristen får automatisk opp **neste forestående konsert** i kalenderen. Hvis mobilen husker en gammel konsert som ligger i fortiden, forkastes den automatisk.
+- **Fokusert konsertvelger:** Korister ser kun kommende konserter sortert kronologisk (den nærmeste øverst). Gamle, avsluttede konserter skjules for å unngå feilvalg.
+- **«Hvem er du?»:** Valget lagres i nettleseren, og «meg selv» utheves med pulserende ring og navnelapp.
+- **Fast bunnlinje:** Viser rad, plass fra venstre og stemmegruppe, med sangvelger og forrige/neste.
+- **Zoombart og panorerbart lerret:** Klyp, musehjul og dra med *semantisk zoom*: initialer langt unna, kallenavn, stemme og høyde når du zoomer inn.
+- **Mørk modus og utskrift:** Sømløs mørk drakt og utskriftsvennlig visning av oppstillingene.
+- **PWA / Frakoblet bruk:** Installerbar app som fungerer uten nett etter første besøk.
+- **Personvern:** Sangerhøyder eksponeres kun for innlogget dirigent/admin.
 
 **For dirigenten (passordbeskyttet)**
-- Redigering på fire måter: trykk-for-å-bytte, dra-og-slipp, hurtigmeny (solo, benk, lås, bytt stemmegruppe) og reservebenk
-- Auto-sortering (høyde, høyeste bakerst, stemmegrupper i blokker, låste plasser beholdes). Radene fylles tett og jevnt, så det aldri blir hull i koret (solistens plass kan valgfritt holdes av som tomt spor)
-- Form og geometri: én slider for bue/amfi (helt til venstre = rette rader), sangeravstand (tett til luftig, 60–110 cm), antall rader
-- Individuell radjustering: forskyvning og utstrekning (spredning) per enkelt rad
-- Kollisjonsadvarsel (rød ring) og varsel om sangere utenfor scenen
-- Flere sanger per konsert: kopier forrige, solister (midt / fordelt / par; behold eller lukk hull)
-- Midlertidig stemmegruppe («Synger B (Fast: T)») med opprinnelig farge
-- Oppmøteliste per konsert: de som er borte forsvinner fra oppstillingen, og kommer tilbake på sin plass
+- **Fleksibel redigering:** Fire måter å flytte korister på: trykk-for-å-bytte, dra-og-slipp, hurtigmeny (solo, benk, lås, bytt stemmegruppe) og reservebenk.
+- **Auto-sortering:** Høyde (høyeste bakerst), stemmegrupper i sammenhengende blokker, låste plasser beholdes. Radene fylles tett og jevnt uten hull.
+- **Form og geometri:** Én slider for bue/amfi (0 = rette rader), sangeravstand (tett til luftig, 60–110 cm) og valgfritt antall rader.
+- **Individuell radjustering:** Forskyvning til siden og utstrekning/spredning per enkelt rad.
+- **Varsler:** Visuell kollisjonsadvarsel (rød ring) og varsel om sangere utenfor scenens mål.
+- **Flere sanger per konsert:** Kopier forrige sang, solister (midt / fordelt / par; behold eller lukk hull).
+- **Midlertidig stemmegruppe:** F.eks. «Synger B (Fast: T)» med opprinnelig farge.
+- **Oppmøteliste:** Huk av fravær per konsert; de som er borte forsvinner fra oppstillingen og kommer tilbake på plass ved oppmøte.
 
 **Administrasjon (`/admin`)**
-- Stemmegrupper med egne farger (fargevelger) og profiler SATB / SSAA / TTBB / S1 S2 A1 A2 T1 T2 B1 B2 (importen godtar «S1», «s 1», «Sopran 1» osv.)
-- Sangere: opprett, rediger, slett, import fra CSV/tekst
-- Lokasjoner (scenebredde/-dybde), konserter, sikkerhetskopi (JSON) og gjenoppretting
-- **Sikkerhet**: Eget passordbytte for innlogget rolle, samt administratortilgang til å tilbakestille dirigentens passord til standardkode
+- **Stemmegrupper:** Egne farger (fargevelger) og standardprofiler (SATB, SSAA, TTBB, S1 S2 A1 A2 T1 T2 B1 B2).
+- **Sangere & Import:** Opprett, rediger, slett, «Slett alle», samt import fra CSV eller utklippstavle. Importdialogen har valg for å *«Erstatte alle eksisterende sangere»* (fjerner demodata automatisk). Eksempelfil med 80 sangere over 8 stemmer følger med i [`korister-80.csv`](korister-80.csv).
+- **Lokasjoner & Scenestørrelser:** Forhåndsdefinerte scener med bredde og dybde i meter.
+- **Konserter:** Opprett konserter med dato, lokasjon og scenemål. Dirigenten har tilgang til hele arkivet (både tidligere og fremtidige).
+- **Sikkerhetskopi & Nullstilling:** Last ned og gjenopprett hele databasen som JSON. Egen knapp for å **«Nullstille kordata»** som sletter demodata (sangere, konserter, scener), men beholder stemmegrupper, lokasjoner og passord.
+- **Sikkerhet:** Bytte av eget passord, samt mulighet for admin til å tilbakestille dirigentpassordet til standardkoden 1234.
 
 ## Tilgangskontroll og sikkerhet
 
@@ -95,7 +99,7 @@ Appen kjører på <http://localhost:3000>, og databasen ligger i volumet `mixup-
 ## Nyttige kommandoer
 
 ```bash
-npm test                          # kjører alle logikk- og autentiseringstester
+npm test                          # kjører alle logikk- og autentiseringstester (29 tester)
 npm run typecheck                 # typekontroll med TypeScript
 npm run lint                      # kodekvalitetssjekk med ESLint
 npm run db:seed                   # fyll tom database med demodata
@@ -118,6 +122,7 @@ src/app            sider og API-ruter (/api/…)
 src/components     brukergrensesnitt (lerret, redigeringspanel, admin …)
 src/lib            geometri (layout.ts), plassering/auto-sortering (placement.ts), database (db.ts, repo.ts), autentisering (auth.ts)
 scripts            seed, logikk- og autentiseringstester, tilbakestilling av passord, API-røyktest
+korister-80.csv    eksempelfil for import av 80 korister (S1–B2)
 public/robots.txt  søkemotorblokkering
 public/sw.js       service worker (PWA)
 ```
