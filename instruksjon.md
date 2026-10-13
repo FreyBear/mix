@@ -43,18 +43,16 @@ Du er en senior fullstack-utvikler. Bygg en komplett, moderne og responsiv webap
 - **Form og radgeometri:**
   - Valg mellom **Rette rader** og **Bue / Amfi**.
   - **Amfi-slider (Radius):** Ved bueform skal en dedikert glidebryter justere kurvaturen/radiusen på buen (fra slak til krapp amfi).
-  - **Sikksakk / Windowing:** Toggle/avkryssing for «Forskyv rader (sikksakk)». Annenhver rad forskyves automatisk med en halv plassbredde sidelengs, slik at sangere bak ser i mellomrommet mellom hodene foran.
+  - **Sangeravstand:** Glidebryter for fysisk avstand mellom sangerne (60–110 cm, f.eks. tett, normal og luftig).
 - **Fysiske dimensjoner og kollisjonsvarsel:**
   - Hver sanger tegnes som en sirkel/oval som representerer en menneskekropp (ca. 55 x 40 cm).
   - Kollisjonsadvarsel (visuell rød ring) og varseltekst dersom sangere står for tett på en rad.
 
 ### 4. Kart-aktig mobilvisning med Pan & Pinch-to-Zoom
 - Skalerbart SVG-lerret som støtter jevn zooming (pinch på mobil, musehjul på desktop) og panorering (dra).
-- Hurtigknapper for «Sentrer på meg» og «Nullstill zoom».
 - **Semantisk Zoom (Level of Detail / LOD):**
   - **Lav zoom (Oversikt):** Sangerne viser farge og **kun initialer** basert på kallenavnet.
   - **Høy zoom (Nærbilde):** Skifter automatisk over til **kallenavn**, stemmegruppe og høyde.
-- **Perspektiv-vender:** Knapp for å veksle mellom «Sett fra salen» (Dirigent) og «Sett fra scenen» (Sanger - speilvender venstre/høyre).
 
 ### 5. Sanger-opplevelse på mobil (Standardmodus)
 - **Ingen innlogging kreves:**
@@ -69,7 +67,6 @@ Du er en senior fullstack-utvikler. Bygg en komplett, moderne og responsiv webap
 ### 6. Konserter, Scener, Solister og Midlertidig Stemmegruppe
 - En konsert har flere scener/sanger (f.eks. «1. Introitus», «2. Solo-ballade», «3. Finale»).
 - **Kopier forrige oppstilling:** Knapp for å duplisere oppsettet fra forrige sang med ett klikk.
-- **Lagre oppstillinger:** Mulighet til å lagre oppsett som gjenbrukbare maler.
 - **Solist-håndtering:**
   - Markere én eller flere sangere som solister i gjeldende sang.
   - Eget solistfelt foran koret (valg: samlet i midten, spredt jevnt foran, eller to-og-to).
@@ -77,17 +74,18 @@ Du er en senior fullstack-utvikler. Bygg en komplett, moderne og responsiv webap
 - **Midlertidig stemmegruppe (Voice Group Override):**
   - En sanger kan tildeles en midlertidig stemmegruppe for den gjeldende scenen/sangen (f.eks. en T2 som synger B1).
   - **Visningsregel for farge:** Sangeren **beholder sin opprinnelige farge** (f.eks. T2-farge), men plasseres fysisk sammen med den nye stemmegruppen (f.eks. B1-blokken).
-  - Noden får en diskret markering (f.eks. en liten stjerne eller stiplet kant) som viser at den er utlånt, og ved zoom/trykk vises teksten: «Synger B1 (Fast: T2)».
+  - Sangeren beholder sin originale farge (fra sin faste stemmegruppe) slik at opprinnelsen er tydelig, uten ekstra stjerner eller spesialmerker. Ved zoom/trykk vises teksten: «Synger B1 (Fast: T2)».
   - Auto-sortering tar hensyn til den nye gruppen ved plassering.
 
 ### 7. Manuell redigering & Dirigentmodus
-- **Dirigent-lås:** Beskyttet med PIN/passord (standard: 1234, definerbar i `.env`).
-- **Auto-sortering:** Sorterer automatisk etter høyde (høyeste bakerst) kombinert med stemmegrupper. Låste plasser flyttes ikke.
-- **Fire samtidige redigeringsmetoder uten konflikt:**
-  1. **Tap-to-Swap:** Trykk for å velge sanger -> trykk på en annen sanger for å bytte, eller tom plass for å flytte.
-  2. **Dra-og-slipp:** Direkte flytting/bytte med mus eller finger.
-  3. **Hurtighandlinger (Tooltip):** Popup ved trykk med knapper for: «Gjør til solist», «Send til benk», «Lås posisjon (Pin)» og «Endre stemmegruppe (kun denne sangen)».
-  4. **Reservebenk:** Skuff under scenen for deltakere som har pause i den aktuelle sangen.
+- **Dirigent-lås:** Beskyttet med PIN/passord (standard: 1234, definerbar i `.env`). Når hengelåsen er åpen, er man alltid i redigeringsmodus (ingen overflødig blyantknapp).
+- **Kontekstuelle bunnkort på scenen:** Ingen plasskrevende sidepaneler; scenen har alltid 100% full bredde. Alle scenejusteringer vises som harmoniske flytende bunnkort:
+  1. **Form og oppstilling:** Åpnes fra en dedikert flytende knapp på scenen. Justerer sangeravstand (60–110 cm), bue/amfi (0–100%), antall rader, auto-sortering og solistplassering.
+  2. **Individuell radjustering:** Trykk på radtall-knappen (1, 2, 3...) for å justere utstrekning (60–140%) og sideveis forskyving (±1,2 m).
+  3. **Sangerkort:** Trykk på en sanger for hurtighandlinger: lås plass, gjør til solist, send til benk, eller midlertidig stemmegruppe.
+- **Auto-sortering:** Sorterer automatisk etter stemmegruppe og høyde (høyeste bakerst). Tar høyde for valgt bue/amfi slik at bakerste rader får proporsjonalt flere sangere enn forreste rad. Låste plasser flyttes ikke. Nullstiller manuelle radjusteringer.
+- **Sangstyring ved sangvelgeren:** Opprett ny sang (kopi/tom), kopier oppstilling fra forrige sang, endre rekkefølge og slett sanger direkte via menyknappen (`⋯`) ved siden av sangvelgeren i topplinjen.
+- **Konsertoppmøte:** Egen direkte sjekklisteknapp i topplinjen for rask registrering av forfall.
 
 ### 8. Administrasjon, Sikkerhetskopi & Open Source
 - **Sikkerhetskopi i UI:** Knapper for «Last ned backup (JSON)» og «Gjenopprett fra JSON» i admin-menyen.

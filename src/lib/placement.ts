@@ -61,13 +61,34 @@ export function autoSort(
   const cw = (ctx.stageW * settings.choirWidthPct) / 100;
   let rows: number;
   if (settings.rowsAuto) {
-    const maxPerRow = Math.max(1, Math.floor(cw / 0.8));
-    rows = Math.min(6, Math.max(1, Math.ceil(N / maxPerRow)));
+    const spacing = (settings.singerSpacing ?? 75) / 100;
     const maxRows = Math.max(
       1,
       Math.floor((ctx.stageD - 0.8 - (hasSolos ? 1.1 : 0)) / 0.6) + 1,
     );
-    rows = Math.min(rows, maxRows);
+    if (settings.shape === "arc" && settings.arc > 0) {
+      const theta = (settings.arc / 100) * Math.PI;
+      const Rb = cw / (2 * Math.sin(theta / 2));
+      const Rmin = Math.max(0.5, (10 * 0.62) / theta);
+      let bestRows = 6;
+      for (let rCount = 1; rCount <= 6; rCount++) {
+        const dr = rCount > 1 ? Math.max(0.5, Math.min(0.75, (Rb - Rmin) / (rCount - 1))) : 0;
+        let totCap = 0;
+        for (let r = 0; r < rCount; r++) {
+          const R = Rb - (rCount - 1 - r) * dr;
+          totCap += Math.max(1, Math.floor((R * theta) / spacing));
+        }
+        if (totCap >= N) {
+          bestRows = rCount;
+          break;
+        }
+      }
+      rows = Math.min(bestRows, maxRows);
+    } else {
+      const maxPerRow = Math.max(1, Math.floor(cw / spacing));
+      rows = Math.min(6, Math.max(1, Math.ceil(N / maxPerRow)));
+      rows = Math.min(rows, maxRows);
+    }
   } else {
     rows = Math.max(1, settings.rows);
   }
@@ -89,11 +110,50 @@ export function autoSort(
   const free = members.filter((p) => !pinned.includes(p));
   rows = Math.max(rows, ...pinned.map((p) => p.row + 1), 1);
 
-  // Radstørrelser: jevnt fordelt (bakerste rader får evt. én ekstra), så alle rader er
-  // fylt tett uten hull. Låste sangere holder av sin plass i sin rad.
-  const base = Math.floor(N / rows);
-  const rem = N % rows;
-  const rowSize = Array.from({ length: rows }, (_, r) => base + (r >= rows - rem ? 1 : 0));
+  // Radstørrelser: tilpasset bue/amfi slik at bakerste rader (som har større radius og
+  // lengre bue) får flere korister, mens forreste rad får færre.
+  // Ved rette rader (arc = 0) er koristene jevnt fordelt (+/- 1).
+  let rowSize: number[];
+  const isArc = settings.shape === "arc" && settings.arc > 0;
+  if (!isArc || rows <= 1) {
+    const base = Math.floor(N / rows);
+    const rem = N % rows;
+    rowSize = Array.from({ length: rows }, (_, r) => base + (r >= rows - rem ? 1 : 0));
+  } else {
+    const spacing = (settings.singerSpacing ?? 75) / 100;
+    const effCw = Math.min(cw, Math.max(4.0, (N / rows) * spacing * 1.15));
+    const theta = (settings.arc / 100) * Math.PI;
+    const Rb = effCw / (2 * Math.sin(theta / 2));
+    const dr = Math.min(0.85, Math.max(0.1, (Rb - 0.5) / (rows - 1)));
+    const weights = Array.from({ length: rows }, (_, r) =>
+      Math.max(0.5, Rb - (rows - 1 - r) * dr),
+    );
+    const totalWeight = weights.reduce((a, b) => a + b, 0);
+
+    if (N < rows) {
+      rowSize = Array(rows).fill(0);
+      const byWeight = Array.from({ length: rows }, (_, r) => r).sort(
+        (a, b) => weights[b] - weights[a],
+      );
+      for (let i = 0; i < N; i++) rowSize[byWeight[i]] = 1;
+    } else {
+      const surplus = N - rows;
+      const exact = weights.map((w) => (surplus * w) / totalWeight);
+      rowSize = exact.map((x) => 1 + Math.floor(x));
+      let allocated = rowSize.reduce((a, b) => a + b, 0);
+
+      const byFrac = exact
+        .map((x, r) => ({ r, frac: x - Math.floor(x) }))
+        .sort((a, b) => b.frac - a.frac || b.r - a.r);
+
+      let remIdx = 0;
+      while (allocated < N && remIdx < byFrac.length) {
+        rowSize[byFrac[remIdx].r]++;
+        allocated++;
+        remIdx++;
+      }
+    }
+  }
   const pinnedCount = Array.from({ length: rows }, (_, r) => pinned.filter((p) => p.row === r).length);
   const cap = rowSize.map((sz, r) => Math.max(0, sz - pinnedCount[r]));
   let capSum = cap.reduce((a, b) => a + b, 0);
@@ -189,7 +249,7 @@ export function autoSort(
     const base = unpinned.has(p.singerId) ? { ...p, pinned: false } : p;
     return a ? { ...base, row: a.row, slot: a.slot } : base;
   });
-  return { placements: next, settings: { ...settings, rows, slots: C } };
+  return { placements: next, settings: { ...settings, rows, slots: C, rowAdjustments: undefined } };
 }
 
 /**
@@ -322,6 +382,7 @@ export function reconcile(
 export type DropTarget =
   | { type: "singer"; id: number }
   | { type: "slot"; row: number; slot: number }
+  | { type: "insert"; row: number; index: number; x?: number; y?: number }
   | { type: "bench" };
 
 export interface OpResult {
@@ -347,6 +408,67 @@ export function moveSinger(
   if (!a) return { state };
   if (target.type === "singer" && target.id === sourceId) return { state };
   const locked = "Plassen er låst. Fjern låsen først.";
+
+  if (target.type === "insert") {
+    if (a.pinned && a.status !== "bench") return { state, error: locked };
+
+    const targetRow = target.row;
+    const targetIndex = target.index;
+
+    // Andre sangere på rutenettet
+    const others = state.placements.filter((p) => p.singerId !== sourceId && onGrid(p));
+
+    // Målradens sangere (uten kilden), sortert etter gjeldende slot
+    const inTargetRow = others
+      .filter((p) => p.row === targetRow)
+      .sort((p1, p2) => p1.slot - p2.slot);
+
+    // Sett inn sourceId på ønsket indeks i målraden
+    const targetSeq = inTargetRow.map((p) => p.singerId);
+    targetSeq.splice(Math.min(Math.max(targetIndex, 0), targetSeq.length), 0, sourceId);
+
+    const targetSlotMap = new Map<number, number>();
+    targetSeq.forEach((id, idx) => targetSlotMap.set(id, idx));
+
+    // Hvis kilden kom fra en annen rad, renummerer vi kilderaden så den forblir tett
+    const sourceOldRow = a.status !== "bench" && a.row >= 0 ? a.row : null;
+    const sourceSlotMap = new Map<number, number>();
+    if (sourceOldRow !== null && sourceOldRow !== targetRow) {
+      const inSourceRow = others
+        .filter((p) => p.row === sourceOldRow)
+        .sort((p1, p2) => p1.slot - p2.slot);
+      inSourceRow.forEach((p, idx) => sourceSlotMap.set(p.singerId, idx));
+    }
+
+    const nextPlacements = state.placements.map((p) => {
+      if (p.singerId === sourceId) {
+        return {
+          ...p,
+          row: targetRow,
+          slot: targetSlotMap.get(sourceId)!,
+          status: "choir" as const,
+        };
+      }
+      if (p.row === targetRow && targetSlotMap.has(p.singerId)) {
+        return { ...p, slot: targetSlotMap.get(p.singerId)! };
+      }
+      if (sourceOldRow !== null && p.row === sourceOldRow && sourceSlotMap.has(p.singerId)) {
+        return { ...p, slot: sourceSlotMap.get(p.singerId)! };
+      }
+      return p;
+    });
+
+    const slots = Math.max(state.settings.slots, targetSeq.length);
+    const rows = Math.max(state.settings.rows, targetRow + 1);
+
+    return {
+      state: {
+        ...state,
+        settings: { ...state.settings, slots, rows },
+        placements: nextPlacements,
+      },
+    };
+  }
 
   if (target.type === "bench") {
     if (a.status === "bench") return { state };

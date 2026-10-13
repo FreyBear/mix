@@ -26,7 +26,7 @@ import {
 } from "../src/lib/repo";
 import { createBackup, restoreBackup } from "../src/lib/backup";
 import { parseSingerImport } from "../src/lib/singer-import";
-import { DEFAULT_SETTINGS } from "../src/lib/types";
+import { DEFAULT_SETTINGS, type SceneSettings } from "../src/lib/types";
 import { VOICE_PROFILES } from "../src/lib/profiles";
 
 let passed = 0;
@@ -120,14 +120,12 @@ test("amfi bøyer rader fremover i endene", () => {
   assert.ok(rowY(arc, 0, "min") > rowY(arc, 0, "max") + 0.3, "kanten er foran midten (nærmere publikum)");
 });
 
-test("sikksakk forskyver annenhver rad", () => {
-  const z = computeLayout(12, 7, { ...s1.settings, zigzag: true }, items(s1));
-  const n = computeLayout(12, 7, { ...s1.settings, zigzag: false }, items(s1));
-  const first = (l: typeof z, row: number) =>
-    Math.min(...l.nodes.filter((nd) => nd.row === row).map((nd) => nd.x));
-  const shift0 = first(z, 0) - first(n, 0);
-  const shift1 = first(z, 1) - first(n, 1);
-  assert.ok(shift1 - shift0 > 0.3, "rad 2 er forskjøvet i forhold til rad 1");
+test("sangeravstand styrer avstanden mellom korister", () => {
+  const tight = computeLayout(12, 7, { ...s1.settings, singerSpacing: 60 }, items(s1));
+  const loose = computeLayout(12, 7, { ...s1.settings, singerSpacing: 100 }, items(s1));
+  const span = (l: typeof tight) =>
+    Math.max(...l.nodes.map((n) => n.x)) - Math.min(...l.nodes.map((n) => n.x));
+  assert.ok(span(tight) < span(loose), "større sangeravstand gir bredere oppstilling");
 });
 
 /** Avstanden mellom naboer i en rad (langs raden) skal være lik overalt (ingen hull). */
@@ -202,6 +200,32 @@ test("auto-sortering gir jevnt fylte rader uten hull for alle koretørrelser", (
     }
     assertNoHoles(computeLayout(12, 7, state.settings, state.placements), `n=${n}`);
   }
+});
+
+test("auto-sortering med bue gir flere korister på bakerste enn forreste rad", () => {
+  const arcSettings = {
+    ...DEFAULT_SETTINGS,
+    shape: "arc" as const,
+    arc: 80,
+    rowsAuto: false,
+    rows: 3,
+  };
+  const state = autoSort(s1.placements, arcSettings, ctx);
+  const perRow = new Map<number, number[]>();
+  for (const p of state.placements) {
+    if (!perRow.has(p.row)) perRow.set(p.row, []);
+    perRow.get(p.row)!.push(p.slot);
+  }
+  const sizes = [0, 1, 2].map((r) => perRow.get(r)?.length ?? 0);
+  assert.ok(
+    sizes[2] > sizes[0],
+    `bakerste rad (${sizes[2]}) skal ha flere enn forreste (${sizes[0]}) ved arc=80`,
+  );
+  assert.equal(sizes.reduce((a, b) => a + b, 0), 32);
+  const layout = computeLayout(12, 7, state.settings, state.placements);
+  assert.equal(layout.collisionIds.size, 0, "ingen kollisjoner med bue-autosort");
+  assert.equal(layout.outsideIds.size, 0, "ingen utenfor scenen");
+  assertNoHoles(layout, "arc=80 autosort");
 });
 
 test("hull oppstår ikke etter benk, fravær, stemmebytte og tilbakeføring", () => {
@@ -329,6 +353,40 @@ test("redigering: bytte, flytte til tom plass, benk og lås", () => {
   assert.equal(pinnedAfter.slot, a.slot);
 });
 
+test("redigering: sette inn sanger mellom to sangere i en annen rekke", () => {
+  const base = { placements: s1.placements, settings: s1.settings };
+  const r0Singers = base.placements.filter((p) => p.status === "choir" && p.row === 0).sort((a, b) => a.slot - b.slot);
+  const r1Singers = base.placements.filter((p) => p.status === "choir" && p.row === 1).sort((a, b) => a.slot - b.slot);
+  const initialR0Count = r0Singers.length;
+  const initialR1Count = r1Singers.length;
+
+  const movedSingerId = r0Singers[1].singerId;
+  const insertIndex = 2;
+
+  const res = moveSinger(base, movedSingerId, { type: "insert", row: 1, index: insertIndex }, ctx);
+  assert.ok(!res.error);
+
+  const nextR0 = res.state.placements.filter((p) => p.status === "choir" && p.row === 0).sort((a, b) => a.slot - b.slot);
+  const nextR1 = res.state.placements.filter((p) => p.status === "choir" && p.row === 1).sort((a, b) => a.slot - b.slot);
+
+  // Kilderaden skal ha én færre sanger
+  assert.equal(nextR0.length, initialR0Count - 1);
+  // Målraden skal ha én flere sanger
+  assert.equal(nextR1.length, initialR1Count + 1);
+
+  // Sangeren skal stå på den spesifiserte indeksen i målraden
+  assert.equal(nextR1[insertIndex].singerId, movedSingerId);
+
+  // Begge radene skal være tett nummerert (slot 0..n-1 uten hull)
+  nextR0.forEach((p, i) => assert.equal(p.slot, i));
+  nextR1.forEach((p, i) => assert.equal(p.slot, i));
+
+  // Layout skal beregnes gyldig og uten feil
+  const l = computeLayout(concert.stageWidth, concert.stageDepth, res.state.settings, res.state.placements);
+  assert.ok(l.nodes.length > 0);
+  assert.ok(l.nodes.some((n) => n.singerId === movedSingerId && n.row === 1));
+});
+
 test("solist-veksling og override via operasjoner", () => {
   const base = { placements: s1.placements, settings: s1.settings };
   const x = base.placements[3].singerId;
@@ -408,11 +466,42 @@ test("import: CSV med overskrift og ren tekst", () => {
   assert.equal(plain.rows[0].voiceGroupId, groups.find((g) => g.abbr === "B")!.id);
 });
 
+test("individuell radjustering: forskyving og utstrekning fungerer, og nullstilles ved auto-sortering", () => {
+  const base = computeLayout(12, 7, s1.settings, items(s1));
+  const r1Base = base.nodes.filter((n) => n.row === 1).sort((a, b) => a.x - b.x);
+  const r1SpanBase = r1Base[r1Base.length - 1].x - r1Base[0].x;
+  const r1MidBase = (r1Base[0].x + r1Base[r1Base.length - 1].x) / 2;
+
+  // 1. Forskyv rad 1 med 0.4 meter til høyre
+  const shiftedSettings: SceneSettings = {
+    ...s1.settings,
+    rowAdjustments: { 1: { shift: 0.4, spread: 100 } },
+  };
+  const shifted = computeLayout(12, 7, shiftedSettings, items(s1));
+  const r1Shifted = shifted.nodes.filter((n) => n.row === 1).sort((a, b) => a.x - b.x);
+  const r1MidShifted = (r1Shifted[0].x + r1Shifted[r1Shifted.length - 1].x) / 2;
+  assert.ok(Math.abs(r1MidShifted - (r1MidBase + 0.4)) < 1e-4, "rad 1 er forskjøvet 0.4m til høyre");
+
+  // 2. Strekk rad 1 med spread = 120 (20% bredere)
+  const spreadSettings: SceneSettings = {
+    ...s1.settings,
+    rowAdjustments: { 1: { shift: 0, spread: 120 } },
+  };
+  const spread = computeLayout(12, 7, spreadSettings, items(s1));
+  const r1Spread = spread.nodes.filter((n) => n.row === 1).sort((a, b) => a.x - b.x);
+  const r1SpanSpread = r1Spread[r1Spread.length - 1].x - r1Spread[0].x;
+  assert.ok(Math.abs(r1SpanSpread - r1SpanBase * 1.2) < 1e-4, "rad 1 er strukket med 20%");
+
+  // 3. Auto-sortering skal nullstille radjusteringer
+  const sorted = autoSort(s1.placements, shiftedSettings, ctx);
+  assert.equal(sorted.settings.rowAdjustments, undefined, "rowAdjustments er nullstilt etter autoSort");
+});
+
 test("alle solo-oppsett og rader/amfi-kombinasjoner gir gyldig layout", () => {
   for (const shape of ["rows", "arc"] as const) {
-    for (const zigzag of [false, true]) {
-      for (const pct of [30, 60, 90, 100]) {
-        const l = computeLayout(8, 5, { ...DEFAULT_SETTINGS, zigzag, choirWidthPct: pct, arc: shape === "arc" ? 100 : 0 }, items(s1));
+    for (const spacing of [60, 75, 95]) {
+      for (const pct of [50, 90]) {
+        const l = computeLayout(8, 5, { ...DEFAULT_SETTINGS, singerSpacing: spacing, choirWidthPct: pct, arc: shape === "arc" ? 100 : 0 }, items(s1));
         assert.equal(l.nodes.length, 32);
         assert.ok(l.nodes.every((n) => Number.isFinite(n.x) && Number.isFinite(n.y)));
       }

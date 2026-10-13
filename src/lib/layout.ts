@@ -39,12 +39,19 @@ export interface LayoutWarning {
   singerIds: number[];
 }
 
+export interface LRowLabel {
+  row: number;
+  x: number;
+  y: number;
+}
+
 export interface LayoutResult {
   rows: number;
   slots: number;
   rowSpacing: number;
   nodes: LNode[];
   gridSlots: LSlot[];
+  rowLabels: LRowLabel[];
   warnings: LayoutWarning[];
   collisionIds: Set<number>;
   outsideIds: Set<number>;
@@ -78,14 +85,17 @@ export function computeLayout(
     entries.forEach((it, rank) => effSlot.set(it.singerId, start + rank));
   });
 
-  const cw = (stageW * settings.choirWidthPct) / 100;
+  const spacingM = (settings.singerSpacing ?? 75) / 100;
+  const maxAllowedW = Math.min(
+    stageW - 2 * MARGIN,
+    (stageW * (settings.choirWidthPct ?? 100)) / 100,
+  );
+  const cw = Math.min(C * spacingM, maxAllowedW);
   const left = (stageW - cw) / 2;
   const cx = stageW / 2;
-  const zig = settings.zigzag;
-  const s = cw / (C + (zig ? 0.5 : 0));
-  /** Posisjon langs raden som andel 0..1 av korbredden (sikksakk forskyver annenhver rad). */
-  const fracOf = (r: number, i: number) =>
-    (s * (i + 0.5) + (zig && r % 2 === 1 ? s / 2 : 0)) / cw;
+  const s = cw / C;
+  /** Posisjon langs raden som andel 0..1 av korbredden. */
+  const fracOf = (_r: number, i: number) => (s * (i + 0.5)) / cw;
 
   const hasSolos = active.some((i) => i.status === "solo");
   // Bue: hver rad er en sirkelbue rundt midten av scenekanten mot publikum. Sangerne står med
@@ -100,9 +110,19 @@ export function computeLayout(
     rows > 1 ? Math.max(0.5, Math.min(rs, (Rb - Rmin) / (rows - 1))) : rs;
   const pos = (r: number, i: number, rs: number) => {
     const f = fracOf(r, i);
-    if (!arcOn) return { x: left + f * cw, y: r * rs };
+    const adj = settings.rowAdjustments?.[r];
+    const shift = adj?.shift ?? 0;
+    const spread = (adj?.spread ?? 100) / 100;
+
+    if (!arcOn) {
+      return {
+        x: cx + (f - 0.5) * cw * spread + shift,
+        y: r * rs,
+      };
+    }
     const R = Rb - (rows - 1 - r) * radialFor(rs);
-    const th = (f - 0.5) * theta;
+    const shiftAngle = R > 0.01 ? shift / R : 0;
+    const th = (f - 0.5) * theta * spread + shiftAngle;
     return { x: cx + R * Math.sin(th), y: R * Math.cos(th) };
   };
 
@@ -225,10 +245,24 @@ export function computeLayout(
     });
   }
 
+  // Radknapper: plasseres i samme bue som raden, et lite stykke før første sanger.
+  const rowLabels: LRowLabel[] = [];
+  for (let r = 0; r < rows; r++) {
+    const entries = rowEntries[r];
+    const start = (C - entries.length) / 2;
+    const labelPos = place(r, start - 0.7);
+    rowLabels.push({
+      row: r,
+      x: Math.max(0.25, labelPos.x),
+      y: labelPos.y,
+    });
+  }
+
   // Beregningene over regner y = 0 som scenekanten mot publikum. Lerretet tegner
   // publikum nederst (y = stageD), så snu y: rad 1 og solister havner nærmest publikum.
   for (const nd of nodes) nd.y = stageD - nd.y;
   for (const gs of gridSlots) gs.y = stageD - gs.y;
+  for (const rl of rowLabels) rl.y = stageD - rl.y;
 
   // Kollisjoner og scenekant.
   const collisionIds = new Set<number>();
@@ -280,6 +314,7 @@ export function computeLayout(
     rowSpacing,
     nodes,
     gridSlots,
+    rowLabels,
     warnings,
     collisionIds,
     outsideIds,

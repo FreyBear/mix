@@ -123,8 +123,8 @@ input[type="range"] {
 
 @media print {
   @page {
-    size: A4 landscape;
-    margin: 12mm;
+    size: landscape;
+    margin: 8mm 10mm;
   }
   :root {
     --bg: #ffffff;
@@ -144,18 +144,40 @@ input[type="range"] {
   }
   html,
   body {
-    height: auto;
+    height: 100% !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
     background: #fff !important;
     color: #000 !important;
+    overflow: hidden !important;
   }
   .no-print {
     display: none !important;
   }
   .print-only {
-    display: block !important;
+    display: flex !important;
+  }
+  .print-sheet {
+    display: flex !important;
+    flex-direction: column !important;
+    height: 100% !important;
+    max-height: 100% !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    page-break-before: avoid !important;
+    page-break-after: avoid !important;
+    page-break-inside: avoid !important;
+    break-before: avoid !important;
+    break-after: avoid !important;
+    break-inside: avoid !important;
+    overflow: hidden !important;
   }
   .print-sheet svg {
-    width: 100%;
-    height: auto;
+    flex: 1 1 0 !important;
+    min-height: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    max-height: 100% !important;
   }
 }

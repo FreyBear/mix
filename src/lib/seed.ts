@@ -109,10 +109,10 @@ export function seedDatabase(db: Db) {
     second = toggleBench(second, byNick("Odd"), ctx).state;
     insertScene(db, concertId, "Solo-ballade", second.settings, second.placements);
 
-    // Sang 3: amfi med sikksakk og en tenor som låner bass.
+    // Sang 3: amfi og en tenor som låner bass.
     let third: PlacementState = {
       placements: first.placements,
-      settings: { ...first.settings, shape: "arc", arc: 45, zigzag: true },
+      settings: { ...first.settings, shape: "arc", arc: 45, singerSpacing: 80 },
     };
     third = setOverride(third, byNick("Ola"), groupByAbbr.get("B")!, ctx).state;
     insertScene(db, concertId, "Finale", third.settings, third.placements);

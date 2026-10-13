@@ -35,14 +35,23 @@ export interface Concert {
   stageDepth: number;
 }
 
+export interface RowAdjustment {
+  /** Sideveis forskyving i meter (-2.0 til +2.0m, standard 0). */
+  shift?: number;
+  /** Utstrekning i prosent (50% til 150%, standard 100%). */
+  spread?: number;
+}
+
 export interface SceneSettings {
+  /** Sangeravstand (senter-til-senter i cm, 60-120). */
+  singerSpacing: number;
   /** Korets maksimale bredde i prosent av scenen (30-100). */
   choirWidthPct: number;
   shape: Shape;
   /** Bue/amfi-krumning: 0 = rette rader, opp til 100 (krapp). `shape` utledes fra denne. */
   arc: number;
   /** Forskyv annenhver rad en halv plassbredde. */
-  zigzag: boolean;
+  zigzag?: boolean;
   rowsAuto: boolean;
   rows: number;
   /** Antall plasser (kolonner) per rad i rutenettet. */
@@ -50,6 +59,8 @@ export interface SceneSettings {
   soloLayout: SoloLayout;
   /** Behold solistens opprinnelige korplass som tomt spor. */
   soloKeepGap: boolean;
+  /** Individuelle justeringer per rad (forskyving og utstrekning). */
+  rowAdjustments?: Record<number, RowAdjustment>;
 }
 
 export interface Placement {
@@ -81,6 +92,7 @@ export interface Template {
 }
 
 export const DEFAULT_SETTINGS: SceneSettings = {
+  singerSpacing: 75,
   choirWidthPct: 90,
   shape: "rows",
   arc: 0,
@@ -97,22 +109,49 @@ const num = (v: unknown, fallback: number) =>
   typeof v === "number" && Number.isFinite(v) ? v : fallback;
 
 /** Gjør om ukjent JSON til gyldige scene-innstillinger. */
+export function sanitizeRowAdjustments(raw: unknown): Record<number, RowAdjustment> | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const out: Record<number, RowAdjustment> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    const row = Number(k);
+    if (!Number.isInteger(row) || row < 0 || row > 10) continue;
+    if (!v || typeof v !== "object") continue;
+    const item = v as Record<string, unknown>;
+    const shift =
+      typeof item.shift === "number" && Number.isFinite(item.shift)
+        ? clamp(Math.round(item.shift * 100) / 100, -3, 3)
+        : 0;
+    const spread =
+      typeof item.spread === "number" && Number.isFinite(item.spread)
+        ? clamp(Math.round(item.spread), 40, 200)
+        : 100;
+    if (shift !== 0 || spread !== 100) {
+      out[row] = { shift, spread };
+    }
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
 export function sanitizeSettings(raw: unknown): SceneSettings {
   const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
   const d = DEFAULT_SETTINGS;
   // Eldre data hadde en egen bryter for rette rader; «rows» betyr da arc = 0.
   const arc = r.shape === "rows" ? 0 : clamp(Math.round(num(r.arc, d.arc)), 0, 100);
+  const singerSpacing = clamp(Math.round(num(r.singerSpacing, d.singerSpacing)), 55, 130);
+  const rowAdjustments = sanitizeRowAdjustments(r.rowAdjustments);
   return {
+    singerSpacing,
     choirWidthPct: clamp(Math.round(num(r.choirWidthPct, d.choirWidthPct)), 30, 100),
     shape: arc > 0 ? "arc" : "rows",
     arc,
-    zigzag: r.zigzag === true,
+    zigzag: false,
     rowsAuto: r.rowsAuto !== false,
     rows: clamp(Math.round(num(r.rows, d.rows)), 1, 10),
     slots: clamp(Math.round(num(r.slots, d.slots)), 1, 60),
     soloLayout:
       r.soloLayout === "spread" || r.soloLayout === "pairs" ? r.soloLayout : "center",
     soloKeepGap: r.soloKeepGap === true,
+    ...(rowAdjustments ? { rowAdjustments } : {}),
   };
 }
 

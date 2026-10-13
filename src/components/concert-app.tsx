@@ -5,14 +5,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ChevronLeft,
   ChevronRight,
-  FlipHorizontal2,
-  LocateFixed,
+  ListChecks,
   Lock,
   LockOpen,
-  Maximize,
-  Pencil,
-  Plus,
-  Minus,
+  MoreHorizontal,
   Printer,
   Settings,
   SlidersHorizontal,
@@ -35,13 +31,16 @@ import {
   type PlacementCtx,
   type PlacementState,
 } from "@/lib/placement";
-import type { Concert, Scene, SceneSettings, Template } from "@/lib/types";
+import type { Concert, Scene, SceneSettings } from "@/lib/types";
 import { AttendanceDialog } from "./attendance-dialog";
 import { BenchDrawer } from "./bench-drawer";
-import { EditPanel } from "./edit-panel";
+import { StageSetupCard } from "./stage-setup-card";
+import { SongMenuDialog } from "./song-menu-dialog";
 import { PinDialog } from "./pin-dialog";
 import { PrintSheet } from "./print-sheet";
 import { SingerCard } from "./singer-card";
+import { RowAdjustmentCard } from "./row-adjustment-card";
+import type { RowAdjustment } from "@/lib/types";
 import { StageCanvas, type StageHandle } from "./stage-canvas";
 import { useToast } from "./toast";
 
@@ -53,7 +52,6 @@ interface ConcertData {
 
 const LS = {
   me: "mixup.me",
-  mirror: "mixup.mirror",
   concert: "mixup.concert",
   scene: (cid: number) => `mixup.scene.${cid}`,
 };
@@ -89,7 +87,7 @@ function pickConcertId(concerts: Concert[]): number | null {
 }
 
 export default function ConcertApp() {
-  const { data, error, reload, patch } = useBootstrap();
+  const { data, error, reload } = useBootstrap();
 
   if (error && !data) {
     return (
@@ -108,17 +106,15 @@ export default function ConcertApp() {
       </div>
     );
   }
-  return <Viewer boot={data} reload={reload} patch={patch} />;
+  return <Viewer boot={data} reload={reload} />;
 }
 
 function Viewer({
   boot,
   reload,
-  patch,
 }: {
   boot: Bootstrap;
   reload: () => Promise<Bootstrap | null>;
-  patch: (p: Partial<Bootstrap>) => void;
 }) {
   const toast = useToast();
   const admin = boot.admin;
@@ -131,13 +127,11 @@ function Viewer({
     const n = Number(readLS(LS.me));
     return boot.singers.some((s) => s.id === n) ? n : null;
   });
-  const [mirrorPref, setMirrorPref] = useState<boolean | null>(() => {
-    const v = readLS(LS.mirror);
-    return v === "1" ? true : v === "0" ? false : null;
-  });
-  const [editMode, setEditMode] = useState(false);
-  const [panelOpen, setPanelOpen] = useState(false);
+  const editMode = admin;
+  const [showSetup, setShowSetup] = useState(false);
+  const [showSongMenu, setShowSongMenu] = useState(false);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [selectedRow, setSelectedRow] = useState<number | null>(null);
   const [showPin, setShowPin] = useState(false);
   const [showAttendance, setShowAttendance] = useState(false);
   const [fitSignal, setFitSignal] = useState(0);
@@ -183,7 +177,6 @@ function Viewer({
     } catch (e) {
       toastRef.current(e instanceof Error ? e.message : "Kunne ikke lagre", "error");
       if (e instanceof ApiError && e.status === 401) {
-        setEditMode(false);
         void reloadRef.current();
       }
     } finally {
@@ -277,14 +270,7 @@ function Viewer({
     window.history.replaceState(null, "", url.toString());
   }, [concertId, sceneId]);
 
-  // Dirigentmodus kan ikke bli stående hvis innloggingen utløper.
-  useEffect(() => {
-    if (!admin && editMode) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setEditMode(false);
-      setPanelOpen(false);
-    }
-  }, [admin, editMode]);
+
 
   // ---- Avledede data ------------------------------------------------------
   const singers = useMemo(() => new Map(boot.singers.map((s) => [s.id, s])), [boot.singers]);
@@ -294,7 +280,6 @@ function Viewer({
   const scene = scenes?.find((s) => s.id === sceneId) ?? scenes?.[0] ?? null;
   const sceneIndex = scene && scenes ? scenes.findIndex((s) => s.id === scene.id) : -1;
   const concert = cd?.concert ?? null;
-  const mirror = mirrorPref ?? (meId !== null && !admin);
 
   const validPlacements = useMemo(
     () =>
@@ -359,16 +344,15 @@ function Viewer({
       if (!layout || !concert) return "";
       const node = layout.nodes.find((n) => n.singerId === singerId);
       if (!node) return "";
-      const dx = (x: number) => (mirror ? concert.stageWidth - x : x);
       const mates = layout.nodes
         .filter((n) => n.zone === node.zone && (node.zone === "solo" || n.row === node.row))
-        .sort((a, b) => dx(a.x) - dx(b.x));
+        .sort((a, b) => a.x - b.x);
       const rank = mates.findIndex((n) => n.singerId === singerId) + 1;
       return node.zone === "solo"
         ? `Solist, plass ${rank} fra venstre foran koret`
         : `Rad ${node.row + 1}, plass ${rank} fra venstre`;
     },
-    [placementMap, layout, concert, mirror],
+    [placementMap, layout, concert],
   );
 
   // ---- Redigering -----------------------------------------------------------
@@ -404,6 +388,8 @@ function Viewer({
 
   const handleNodeTap = useCallback(
     (id: number) => {
+      setShowSetup(false);
+      setSelectedRow(null);
       if (!editMode || selectedId === null) {
         setSelectedId((cur) => (cur === id ? null : id));
         return;
@@ -416,6 +402,18 @@ function Viewer({
     },
     [editMode, selectedId, edit],
   );
+
+  const handleRowTap = useCallback(
+    (row: number) => {
+      if (!editMode) return;
+      setShowSetup(false);
+      setSelectedId(null);
+      setSelectedRow((cur) => (cur === row ? null : row));
+    },
+    [editMode],
+  );
+
+
 
   const handleSlotTap = useCallback(
     (row: number, slot: number) => {
@@ -430,8 +428,10 @@ function Viewer({
       if (!scene || !ctx) return;
       const next = { ...scene.settings, ...patchSettings };
       if ("rows" in patchSettings || "rowsAuto" in patchSettings) {
-        const res = autoSort(scene.placements, next, ctx, scene.settings.rows);
+        const nextWithoutAdj = { ...next, rowAdjustments: undefined };
+        const res = autoSort(scene.placements, nextWithoutAdj, ctx, scene.settings.rows);
         applyState(res);
+        setSelectedRow(null);
       } else {
         commitScene(scene.id, (s) => ({ ...s, settings: next }));
       }
@@ -439,10 +439,36 @@ function Viewer({
     [scene, ctx, applyState, commitScene],
   );
 
+  const handleRowAdjustmentChange = useCallback(
+    (adj: RowAdjustment) => {
+      if (selectedRow === null || !scene) return;
+      const current = scene.settings.rowAdjustments ?? {};
+      const nextAdjustments = { ...current, [selectedRow]: adj };
+      if (
+        (adj.shift === 0 || adj.shift === undefined) &&
+        (adj.spread === 100 || adj.spread === undefined)
+      ) {
+        delete nextAdjustments[selectedRow];
+      }
+      const clean = Object.keys(nextAdjustments).length > 0 ? nextAdjustments : undefined;
+      changeSettings({ rowAdjustments: clean });
+    },
+    [selectedRow, scene, changeSettings],
+  );
+
+  const handleRowReset = useCallback(() => {
+    if (selectedRow === null || !scene || !scene.settings.rowAdjustments?.[selectedRow]) return;
+    const current = { ...scene.settings.rowAdjustments };
+    delete current[selectedRow];
+    const clean = Object.keys(current).length > 0 ? current : undefined;
+    changeSettings({ rowAdjustments: clean });
+  }, [selectedRow, scene, changeSettings]);
+
   const doAutoSort = () => {
     if (!scene || !ctx) return;
     if (!window.confirm("Auto-sortere oppstillingen etter stemmegruppe og høyde? Låste plasser blir stående.")) return;
-    applyState(autoSort(scene.placements, scene.settings, ctx));
+    setSelectedRow(null);
+    applyState(autoSort(scene.placements, { ...scene.settings, rowAdjustments: undefined }, ctx));
   };
 
   const doCopyPrev = () => {
@@ -501,34 +527,7 @@ function Viewer({
     }
   };
 
-  const saveTemplate = async (name: string) => {
-    if (!scene) return;
-    await flush();
-    try {
-      const res = await api<{ templates: Template[] }>("POST", "/api/templates", { name, sceneId: scene.id });
-      patch({ templates: res.templates });
-      toast("Mal lagret", "success");
-    } catch (e) {
-      toast(e instanceof Error ? e.message : "Kunne ikke lagre mal", "error");
-    }
-  };
 
-  const applyTemplate = (t: Template) => {
-    if (!scene || !ctx) return;
-    if (!window.confirm(`Bruke malen «${t.name}» på denne sangen?`)) return;
-    applyState(reconcile({ placements: t.placements, settings: t.settings }, attending, ctx));
-    toast(`Brukte malen «${t.name}»`, "success");
-  };
-
-  const deleteTemplate = async (t: Template) => {
-    if (!window.confirm(`Slette malen «${t.name}»?`)) return;
-    try {
-      const res = await api<{ templates: Template[] }>("DELETE", `/api/templates/${t.id}`);
-      patch({ templates: res.templates });
-    } catch (e) {
-      toast(e instanceof Error ? e.message : "Kunne ikke slette mal", "error");
-    }
-  };
 
   const openAttendance = async () => {
     await flush();
@@ -540,12 +539,6 @@ function Viewer({
     const id = value === "" ? null : Number(value);
     setMeId(id);
     writeLS(LS.me, id === null ? null : String(id));
-  };
-
-  const toggleMirror = () => {
-    const next = !mirror;
-    setMirrorPref(next);
-    writeLS(LS.mirror, next ? "1" : "0");
   };
 
   const goScene = (dir: -1 | 1) => {
@@ -563,18 +556,11 @@ function Viewer({
     } catch {
       /* ignorer */
     }
-    setEditMode(false);
-    setPanelOpen(false);
+    setShowSetup(false);
+    setShowSongMenu(false);
+    setSelectedId(null);
+    setSelectedRow(null);
     await reload();
-  };
-
-  const enterEdit = () => {
-    setEditMode((on) => {
-      const next = !on;
-      setPanelOpen(next && window.innerWidth >= 1024);
-      setSelectedId(null);
-      return next;
-    });
   };
 
   // ---- Visning ------------------------------------------------------------------
@@ -630,6 +616,8 @@ function Viewer({
             </button>
           )}
         </div>
+
+
         {showPin && (
           <PinDialog
             onClose={() => setShowPin(false)}
@@ -643,30 +631,7 @@ function Viewer({
     );
   }
 
-  const panel =
-    scene && concert ? (
-      <EditPanel
-        scene={scene}
-        sceneIndex={sceneIndex}
-        sceneCount={scenes?.length ?? 1}
-        hasPrev={sceneIndex > 0}
-        templates={boot.templates}
-        warnings={warnings}
-        saving={saving}
-        onTitle={(title) => commitScene(scene.id, (s) => ({ ...s, title }))}
-        onSettings={changeSettings}
-        onAutoSort={doAutoSort}
-        onCopyPrev={doCopyPrev}
-        onNewScene={(copy) => void newScene(copy)}
-        onDeleteScene={() => void deleteScene()}
-        onMove={(d) => void moveScene(d)}
-        onSaveTemplate={(n) => void saveTemplate(n)}
-        onApplyTemplate={applyTemplate}
-        onDeleteTemplate={(t) => void deleteTemplate(t)}
-        onAttendance={() => void openAttendance()}
-        onClose={() => setPanelOpen(false)}
-      />
-    ) : null;
+
 
   return (
     <>
@@ -701,37 +666,38 @@ function Viewer({
                 )}
               </div>
             </div>
-            <button
-              className="btn-icon"
-              onClick={toggleMirror}
-              aria-label={mirror ? "Sett fra scenen. Trykk for å se fra salen" : "Sett fra salen. Trykk for å se fra scenen"}
-              title={mirror ? "Sett fra scenen" : "Sett fra salen"}
-            >
-              <FlipHorizontal2 className="h-5 w-5" />
-            </button>
             <button className="btn-icon" onClick={() => window.print()} aria-label="Skriv ut" title="Skriv ut">
               <Printer className="h-5 w-5" />
             </button>
             {admin ? (
               <>
                 <button
-                  className={`btn-icon ${editMode ? "!bg-accent !text-accent-fg" : ""}`}
-                  onClick={enterEdit}
-                  aria-pressed={editMode}
-                  aria-label="Rediger oppstilling"
-                  title="Rediger oppstilling"
+                  className="btn-icon"
+                  onClick={() => void openAttendance()}
+                  aria-label="Deltakelse og fravær"
+                  title="Deltakelse og fravær"
                 >
-                  <Pencil className="h-5 w-5" />
+                  <ListChecks className="h-5 w-5" />
                 </button>
                 <Link href="/admin" className="btn-icon" aria-label="Administrasjon" title="Administrasjon">
                   <Settings className="h-5 w-5" />
                 </Link>
-                <button className="btn-icon" onClick={() => void logout()} aria-label="Lås dirigentmodus" title="Lås">
+                <button
+                  className="btn-icon text-accent"
+                  onClick={() => void logout()}
+                  aria-label="Lås dirigentmodus (tilbake til sanger-visning)"
+                  title="Lås dirigentmodus"
+                >
                   <LockOpen className="h-5 w-5" />
                 </button>
               </>
             ) : (
-              <button className="btn-icon" onClick={() => setShowPin(true)} aria-label="Dirigentlås" title="Dirigentlås">
+              <button
+                className="btn-icon"
+                onClick={() => setShowPin(true)}
+                aria-label="Dirigentlås (skriv inn PIN)"
+                title="Dirigentlås (skriv inn PIN)"
+              >
                 <Lock className="h-5 w-5" />
               </button>
             )}
@@ -776,6 +742,8 @@ function Viewer({
                 onChange={(e) => {
                   setSceneId(Number(e.target.value));
                   setSelectedId(null);
+                  setSelectedRow(null);
+                  setShowSetup(false);
                 }}
               >
                 {scenes?.map((s, i) => (
@@ -792,6 +760,16 @@ function Viewer({
               >
                 <ChevronRight className="h-5 w-5" />
               </button>
+              {admin && scene && (
+                <button
+                  className="btn-icon h-10 w-10 shrink-0 text-accent hover:bg-accent/10"
+                  onClick={() => setShowSongMenu(true)}
+                  aria-label="Administrer sanger"
+                  title="Administrer sanger"
+                >
+                  <MoreHorizontal className="h-5 w-5" />
+                </button>
+              )}
             </div>
           </div>
         </header>
@@ -809,14 +787,20 @@ function Viewer({
                 placements={placementMap}
                 singers={singers}
                 groups={groups}
-                mirror={mirror}
                 meId={meId}
                 editMode={editMode}
                 selectedId={selectedId}
+                selectedRow={selectedRow}
+                rowAdjustments={scene.settings.rowAdjustments}
                 fitSignal={fitSignal}
                 onNodeTap={handleNodeTap}
                 onSlotTap={handleSlotTap}
-                onBackgroundTap={() => setSelectedId(null)}
+                onRowTap={handleRowTap}
+                onBackgroundTap={() => {
+                  setSelectedId(null);
+                  setSelectedRow(null);
+                  setShowSetup(false);
+                }}
                 onDrop={handleDrop}
               />
             ) : (
@@ -825,37 +809,12 @@ function Viewer({
               </div>
             )}
 
-            <div className="absolute top-2 right-2 flex flex-col gap-2">
-              <button className="btn-icon" onClick={() => stage.current?.zoomBy(1.4)} aria-label="Zoom inn">
-                <Plus className="h-5 w-5" />
-              </button>
-              <button className="btn-icon" onClick={() => stage.current?.zoomBy(1 / 1.4)} aria-label="Zoom ut">
-                <Minus className="h-5 w-5" />
-              </button>
-              <button className="btn-icon" onClick={() => stage.current?.fit()} aria-label="Nullstill zoom" title="Nullstill zoom">
-                <Maximize className="h-5 w-5" />
-              </button>
-              {meId !== null && mePlacement && mePlacement.status !== "bench" && (
-                <button
-                  className="btn-icon !bg-[var(--me)] !text-[#2e1065]"
-                  onClick={() => stage.current?.centerOn(meId)}
-                  aria-label="Sentrer på meg"
-                  title="Sentrer på meg"
-                >
-                  <LocateFixed className="h-5 w-5" />
-                </button>
-              )}
-            </div>
-
             <div className="absolute top-2 left-2 flex flex-col items-start gap-2">
               {warnings.length > 0 && (
                 <button
                   className="chip border-danger/50 bg-surface/90 text-danger backdrop-blur"
                   onClick={() => {
-                    if (admin) {
-                      setEditMode(true);
-                      setPanelOpen(true);
-                    } else toast(warnings.join(". "), "error");
+                    toast(warnings.join(". "), "error");
                   }}
                   aria-label={`${warnings.length} advarsler`}
                 >
@@ -866,13 +825,46 @@ function Viewer({
               {saving && <span className="chip bg-surface/90 backdrop-blur">Lagrer …</span>}
             </div>
 
-            {editMode && !panelOpen && (
+            {editMode && !showSetup && !selectedSinger && selectedRow === null && (
               <button
-                className="btn btn-primary absolute bottom-3 left-3 shadow-lg"
-                onClick={() => setPanelOpen(true)}
+                className="btn absolute bottom-3 left-3 z-10 flex items-center gap-2 rounded-full border border-line bg-surface/90 px-3.5 py-2 text-xs font-semibold text-fg shadow-lg backdrop-blur transition-all hover:bg-surface active:scale-95"
+                onClick={() => {
+                  setSelectedId(null);
+                  setSelectedRow(null);
+                  setShowSetup(true);
+                }}
+                aria-label="Form og oppstilling"
+                title="Form og oppstilling"
               >
-                <SlidersHorizontal className="h-4 w-4" /> Innstillinger
+                <SlidersHorizontal className="h-4 w-4 text-accent" />
+                <span>Form og oppstilling</span>
               </button>
+            )}
+
+            {editMode && showSetup && !selectedSinger && selectedRow === null && scene && (
+              <div className="pointer-events-none absolute inset-x-2 bottom-2 z-20 flex justify-center">
+                <StageSetupCard
+                  settings={scene.settings}
+                  onSettings={changeSettings}
+                  onAutoSort={doAutoSort}
+                  onClose={() => setShowSetup(false)}
+                />
+              </div>
+            )}
+
+            {editMode && selectedRow !== null && !selectedSinger && scene && (
+              <div className="pointer-events-none absolute inset-x-2 bottom-2 z-20 flex justify-center">
+                <RowAdjustmentCard
+                  row={selectedRow}
+                  singerCount={
+                    scene.placements.filter((p) => p.status === "choir" && p.row === selectedRow).length
+                  }
+                  adjustment={scene.settings.rowAdjustments?.[selectedRow]}
+                  onChange={handleRowAdjustmentChange}
+                  onReset={handleRowReset}
+                  onClose={() => setSelectedRow(null)}
+                />
+              </div>
             )}
 
             {selectedSinger && selectedPlacement && (
@@ -895,9 +887,7 @@ function Viewer({
             )}
           </main>
 
-          {editMode && panelOpen && (
-            <aside className="hidden w-96 shrink-0 border-l border-line bg-surface lg:block">{panel}</aside>
-          )}
+
         </div>
 
         <BenchDrawer
@@ -923,11 +913,7 @@ function Viewer({
           {barText}
         </footer>
 
-        {editMode && panelOpen && (
-          <div className="fixed inset-x-0 bottom-0 z-40 max-h-[72dvh] overflow-hidden rounded-t-2xl border-t border-line bg-surface shadow-2xl lg:hidden">
-            {panel}
-          </div>
-        )}
+
 
         {showPin && (
           <PinDialog
@@ -950,6 +936,21 @@ function Viewer({
               localVersion.current++;
               setCdBoth({ ...cdRef.current!, attendingIds: u.attendingIds, scenes: u.scenes });
             }}
+          />
+        )}
+        {showSongMenu && scene && (
+          <SongMenuDialog
+            key={scene.id}
+            scene={scene}
+            sceneIndex={sceneIndex}
+            sceneCount={scenes?.length ?? 1}
+            hasPrev={sceneIndex > 0}
+            onTitle={(title) => commitScene(scene.id, (s) => ({ ...s, title }))}
+            onCopyPrev={doCopyPrev}
+            onNewScene={(copy) => void newScene(copy)}
+            onDeleteScene={() => void deleteScene()}
+            onMove={(d) => void moveScene(d)}
+            onClose={() => setShowSongMenu(false)}
           />
         )}
       </div>

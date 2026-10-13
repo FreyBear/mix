@@ -12,17 +12,16 @@ Brukergrensesnittet er på norsk bokmål.
 - «Hvem er du?» (lagres i nettleseren), og «meg selv» utheves med pulserende ring og navnelapp
 - Fast bunnlinje med rad, plass fra venstre og stemmegruppe, med sangvelger og forrige/neste
 - Zoombart og panorerbart lerret (klyp, musehjul, dra) med *semantisk zoom*: initialer langt unna, kallenavn, stemme og høyde når du zoomer inn
-- «Sett fra salen / Sett fra scenen», «Sentrer på meg» og «Nullstill zoom»
 - Mørk modus og utskriftsvennlig visning
 - Installerbar (PWA) og fungerer uten nett etter første besøk
 
 **For dirigenten** (PIN-beskyttet)
 - Redigering på fire måter: trykk-for-å-bytte, dra-og-slipp, hurtigmeny (solo, benk, lås, bytt stemmegruppe) og reservebenk
 - Auto-sortering (høyde, høyeste bakerst, stemmegrupper i blokker, låste plasser beholdes). Radene fylles tett og jevnt, så det aldri blir hull i koret (solistens plass kan valgfritt holdes av som tomt spor)
-- Form: én slider for bue/amfi (helt til venstre = rette rader), korbredde 30–100 % (standard 90 %), sikksakk-forskyvning, antall rader
+- Form: én slider for bue/amfi (helt til venstre = rette rader), sangeravstand (tett til luftig, 60–110 cm), antall rader
 - Kollisjonsadvarsel (rød ring) og varsel om sangere utenfor scenen
-- Flere sanger per konsert: kopier forrige, maler, solister (midt / fordelt / par; behold eller lukk hull)
-- Midlertidig stemmegruppe («Synger B (Fast: T)») med opprinnelig farge, stiplet kant og stjerne
+- Flere sanger per konsert: kopier forrige, solister (midt / fordelt / par; behold eller lukk hull)
+- Midlertidig stemmegruppe («Synger B (Fast: T)») med opprinnelig farge
 - Oppmøteliste per konsert: de som er borte forsvinner fra oppstillingen, og kommer tilbake på sin plass
 
 **Administrasjon** (`/admin`)

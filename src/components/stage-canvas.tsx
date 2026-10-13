@@ -11,7 +11,7 @@ import {
 } from "react";
 import { BODY_D, BODY_W, type LayoutResult } from "@/lib/layout";
 import type { DropTarget } from "@/lib/placement";
-import type { Placement, Singer, VoiceGroup } from "@/lib/types";
+import type { Placement, Singer, VoiceGroup, RowAdjustment } from "@/lib/types";
 import { lodForScale, SceneContent, U, type DragView } from "./scene-content";
 
 export interface StageHandle {
@@ -30,14 +30,16 @@ interface Props {
   placements: Map<number, Placement>;
   singers: Map<number, Singer>;
   groups: Map<number, VoiceGroup>;
-  mirror: boolean;
   meId: number | null;
   editMode: boolean;
   selectedId: number | null;
+  selectedRow?: number | null;
+  rowAdjustments?: Record<number, RowAdjustment>;
   /** Øk for å tvinge «nullstill zoom». */
   fitSignal: number;
   onNodeTap: (id: number) => void;
   onSlotTap: (row: number, slot: number) => void;
+  onRowTap?: (row: number) => void;
   onBackgroundTap: () => void;
   onDrop: (id: number, target: DropTarget) => void;
   className?: string;
@@ -52,6 +54,7 @@ interface T {
 
 type TapTarget =
   | { type: "node"; id: number }
+  | { type: "row"; row: number }
   | { type: "slot"; row: number; slot: number }
   | null;
 
@@ -78,13 +81,15 @@ export function StageCanvas(props: Props) {
     placements,
     singers,
     groups,
-    mirror,
     meId,
     editMode,
     selectedId,
+    selectedRow,
+    rowAdjustments,
     fitSignal,
     onNodeTap,
     onSlotTap,
+    onRowTap,
     onBackgroundTap,
     onDrop,
     className,
@@ -131,17 +136,13 @@ export function StageCanvas(props: Props) {
     return () => ro.disconnect();
   }, []);
 
-  const displayX = useCallback((xM: number) => (mirror ? stageW - xM : xM), [mirror, stageW]);
-
   const userMoved = useRef(false);
   const fit = useCallback(() => {
     if (!size.w || !size.h) return;
     const b = layout.bounds;
     const pad = 0.9;
-    const dx1 = displayX(b.minX);
-    const dx2 = displayX(b.maxX);
-    const minX = Math.min(dx1, dx2) - pad;
-    const maxX = Math.max(dx1, dx2) + pad;
+    const minX = b.minX - pad;
+    const maxX = b.maxX + pad;
     const minY = b.minY - pad;
     const maxY = b.maxY + pad + 0.6;
     const bw = (maxX - minX) * U;
@@ -151,7 +152,7 @@ export function StageCanvas(props: Props) {
     const cy = ((minY + maxY) / 2) * U;
     setT({ k, x: size.w / 2 - cx * k, y: size.h / 2 - cy * k });
     userMoved.current = false;
-  }, [size.w, size.h, layout.bounds, displayX, clampK, setT]);
+  }, [size.w, size.h, layout.bounds, clampK, setT]);
 
   // Tilpass visningen første gang, ved speiling og når forelderen ber om det.
   const sized = size.w > 0 && size.h > 0;
@@ -161,7 +162,7 @@ export function StageCanvas(props: Props) {
   });
   useEffect(() => {
     if (sized) fitRef.current();
-  }, [sized, fitSignal, mirror]);
+  }, [sized, fitSignal]);
   // Hold visningen tilpasset når beholderen endrer størrelse, så lenge brukeren ikke har panorert/zoomet.
   useEffect(() => {
     if (sized && !userMoved.current) fitRef.current();
@@ -194,21 +195,157 @@ export function StageCanvas(props: Props) {
   }, [zoomAt]);
 
   const hitDisplay = (wx: number, wy: number, excludeId?: number): DropTarget | null => {
-    let bestNode: { id: number; d: number } | null = null;
+    // 1. Direkte treff på en sanger for å bytte plass (kun hvis pekeren er helt over kjernen)
+    let bestDirectNode: { id: number; dist: number } | null = null;
     for (const n of layout.nodes) {
       if (n.singerId === excludeId) continue;
-      const nx = displayX(n.x);
-      const d = Math.pow((wx - nx) / (BODY_W * 0.75), 2) + Math.pow((wy - n.y) / (BODY_D * 1.1), 2);
-      if (d < 1 && (!bestNode || d < bestNode.d)) bestNode = { id: n.singerId, d };
+      const d = Math.pow((wx - n.x) / (BODY_W * 0.38), 2) + Math.pow((wy - n.y) / (BODY_D * 0.45), 2);
+      if (d < 1 && (!bestDirectNode || d < bestDirectNode.dist)) {
+        bestDirectNode = { id: n.singerId, dist: d };
+      }
     }
-    if (bestNode) return { type: "singer", id: bestNode.id };
-    let bestSlot: { row: number; slot: number; d: number } | null = null;
-    for (const s of layout.gridSlots) {
-      if (s.occupiedBy !== null) continue;
-      const d = Math.hypot(wx - displayX(s.x), wy - s.y);
-      if (d < 0.5 && (!bestSlot || d < bestSlot.d)) bestSlot = { row: s.row, slot: s.slot, d };
+
+    // 2. Kontinuerlig segment-basert innsetting langs hver rekke
+    interface InsertMatch {
+      row: number;
+      index: number;
+      x: number;
+      y: number;
+      verticalDist: number;
     }
-    return bestSlot ? { type: "slot", row: bestSlot.row, slot: bestSlot.slot } : null;
+    let bestInsert: InsertMatch | null = null;
+    let minVerticalDist = Infinity;
+
+    for (let r = 0; r < layout.rows; r++) {
+      const rowNodes = layout.nodes
+        .filter((n) => n.zone === "choir" && n.row === r && n.singerId !== excludeId)
+        .sort((a, b) => a.x - b.x);
+
+      // Tom rekke
+      if (rowNodes.length === 0) {
+        const slotY = layout.gridSlots.find((s) => s.row === r)?.y ?? stageD / 2;
+        const vDist = Math.abs(wy - slotY);
+        if (vDist < 0.75 && vDist < minVerticalDist) {
+          minVerticalDist = vDist;
+          bestInsert = {
+            row: r,
+            index: 0,
+            x: stageW / 2,
+            y: slotY,
+            verticalDist: vDist,
+          };
+        }
+        continue;
+      }
+
+      // Én sanger i rekken
+      if (rowNodes.length === 1) {
+        const single = rowNodes[0];
+        const vDist = Math.abs(wy - single.y);
+        if (vDist < 0.75 && vDist < minVerticalDist) {
+          const isLeft = wx < single.x;
+          const ix = isLeft ? single.x - 0.7 : single.x + 0.7;
+          minVerticalDist = vDist;
+          bestInsert = {
+            row: r,
+            index: isLeft ? 0 : 1,
+            x: ix,
+            y: single.y,
+            verticalDist: vDist,
+          };
+        }
+        continue;
+      }
+
+      // Flere sangere i rekken (beregner buet rekke-omriss)
+      const minY = Math.min(...rowNodes.map((n) => n.y)) - 0.75;
+      const maxY = Math.max(...rowNodes.map((n) => n.y)) + 0.75;
+      if (wy < minY || wy > maxY) continue;
+
+      const first = rowNodes[0];
+      const last = rowNodes[rowNodes.length - 1];
+
+      // A: Venstre for hele rekken (før første sanger)
+      if (wx < first.x) {
+        const vDist = Math.abs(wy - first.y);
+        const hDist = first.x - wx;
+        if (vDist < 0.75 && hDist < 1.4 && vDist < minVerticalDist) {
+          const stepX = rowNodes[1].x - first.x;
+          const stepY = rowNodes[1].y - first.y;
+          minVerticalDist = vDist;
+          bestInsert = {
+            row: r,
+            index: 0,
+            x: first.x - stepX,
+            y: first.y - stepY,
+            verticalDist: vDist,
+          };
+        }
+        continue;
+      }
+
+      // B: Høyre for hele rekken (etter siste sanger)
+      if (wx > last.x) {
+        const vDist = Math.abs(wy - last.y);
+        const hDist = wx - last.x;
+        if (vDist < 0.75 && hDist < 1.4 && vDist < minVerticalDist) {
+          const prev = rowNodes[rowNodes.length - 2];
+          const stepX = last.x - prev.x;
+          const stepY = last.y - prev.y;
+          minVerticalDist = vDist;
+          bestInsert = {
+            row: r,
+            index: rowNodes.length,
+            x: last.x + stepX,
+            y: last.y + stepY,
+            verticalDist: vDist,
+          };
+        }
+        continue;
+      }
+
+      // C: Horisontalt mellom to sangere i denne rekken
+      for (let i = 1; i < rowNodes.length; i++) {
+        const left = rowNodes[i - 1];
+        const right = rowNodes[i];
+        if (wx >= left.x && wx <= right.x) {
+          const span = right.x - left.x;
+          const t = span > 0.001 ? (wx - left.x) / span : 0.5;
+          const segY = left.y + t * (right.y - left.y);
+          const vDist = Math.abs(wy - segY);
+
+          if (vDist < 0.75 && vDist < minVerticalDist) {
+            minVerticalDist = vDist;
+            bestInsert = {
+              row: r,
+              index: i,
+              x: (left.x + right.x) / 2,
+              y: (left.y + right.y) / 2,
+              verticalDist: vDist,
+            };
+          }
+          break;
+        }
+      }
+    }
+
+    // Hvis brukeren peker direkte mot en sanger, prioriteres bytte
+    if (bestDirectNode && (!bestInsert || bestDirectNode.dist < 0.4)) {
+      return { type: "singer", id: bestDirectNode.id };
+    }
+
+    // Ellers snapper vi til det naturlige innsettingspunktet i rekken
+    if (bestInsert) {
+      return {
+        type: "insert",
+        row: bestInsert.row,
+        index: bestInsert.index,
+        x: bestInsert.x,
+        y: bestInsert.y,
+      };
+    }
+
+    return null;
   };
 
   const clientToDisplay = (clientX: number, clientY: number) => {
@@ -232,7 +369,7 @@ export function StageCanvas(props: Props) {
         if (!n) return;
         const k = clampK(Math.max(tRef.current.k, 2.2));
         userMoved.current = true;
-        setT({ k, x: size.w / 2 - displayX(n.x) * U * k, y: size.h / 2 - n.y * U * k });
+        setT({ k, x: size.w / 2 - n.x * U * k, y: size.h / 2 - n.y * U * k });
       },
       hitTest: (clientX, clientY, excludeId) => {
         const p = clientToDisplay(clientX, clientY);
@@ -266,9 +403,11 @@ export function StageCanvas(props: Props) {
 
     const target = e.target as Element;
     const nodeEl = target.closest("[data-node-id]");
+    const rowEl = target.closest("[data-row-id]");
     const slotEl = target.closest("[data-slot-row]");
     let tap: TapTarget = null;
     if (nodeEl) tap = { type: "node", id: Number(nodeEl.getAttribute("data-node-id")) };
+    else if (rowEl) tap = { type: "row", row: Number(rowEl.getAttribute("data-row-id")) };
     else if (slotEl) {
       tap = {
         type: "slot",
@@ -385,6 +524,7 @@ export function StageCanvas(props: Props) {
 
     if (wasMode === "pan" && !g.moved) {
       if (g.tap?.type === "node") onNodeTap(g.tap.id);
+      else if (g.tap?.type === "row") onRowTap?.(g.tap.row);
       else if (g.tap?.type === "slot") onSlotTap(g.tap.row, g.tap.slot);
       else onBackgroundTap();
     }
@@ -413,14 +553,16 @@ export function StageCanvas(props: Props) {
             placements={placements}
             singers={singers}
             groups={groups}
-            mirror={mirror}
             meId={meId}
             k={t.k}
             lod={lod}
             editMode={editMode}
             selectedId={selectedId}
+            selectedRow={selectedRow}
+            rowAdjustments={rowAdjustments}
             drag={drag}
             showRowLabels
+            onRowClick={onRowTap}
           />
         </g>
       </svg>

@@ -3,7 +3,7 @@
 import { useId } from "react";
 import { BODY_D, BODY_W, type LayoutResult } from "@/lib/layout";
 import type { DropTarget } from "@/lib/placement";
-import type { Placement, Singer, VoiceGroup } from "@/lib/types";
+import type { Placement, Singer, VoiceGroup, RowAdjustment } from "@/lib/types";
 import { contrastText, describeLent, initials } from "@/lib/client/format";
 
 export type Lod = "initials" | "name" | "detail";
@@ -36,14 +36,16 @@ export interface SceneContentProps {
   placements: Map<number, Placement>;
   singers: Map<number, Singer>;
   groups: Map<number, VoiceGroup>;
-  mirror: boolean;
   meId: number | null;
   k: number;
   lod: Lod;
   editMode: boolean;
   selectedId: number | null;
+  selectedRow?: number | null;
+  rowAdjustments?: Record<number, RowAdjustment>;
   drag?: DragView | null;
   showRowLabels?: boolean;
+  onRowClick?: (row: number) => void;
 }
 
 export function SceneContent(props: SceneContentProps) {
@@ -55,31 +57,28 @@ export function SceneContent(props: SceneContentProps) {
     placements,
     singers,
     groups,
-    mirror,
     meId,
     k,
     lod,
     editMode,
     selectedId,
+    selectedRow,
+    rowAdjustments,
     drag,
     showRowLabels,
+    onRowClick,
   } = props;
   const patternId = useId().replace(/:/g, "");
   const W = stageW * U;
   const D = stageD * U;
-  const dx = (xM: number) => (mirror ? stageW - xM : xM) * U;
+  const dx = (xM: number) => xM * U;
   const dragging = drag?.id ?? null;
   const target = drag?.target ?? null;
-  const showSlots = editMode && (selectedId !== null || dragging !== null);
 
   const rowLabels: { row: number; x: number; y: number }[] = [];
   if (showRowLabels) {
-    for (let r = 0; r < layout.rows; r++) {
-      const slots = layout.gridSlots.filter((s) => s.row === r);
-      if (!slots.length) continue;
-      let best = slots[0];
-      for (const s of slots) if (dx(s.x) < dx(best.x)) best = s;
-      rowLabels.push({ row: r, x: dx(best.x) - RX - 18, y: best.y * U });
+    for (const rl of layout.rowLabels) {
+      rowLabels.push({ row: rl.row, x: dx(rl.x), y: rl.y * U });
     }
   }
 
@@ -133,60 +132,25 @@ export function SceneContent(props: SceneContentProps) {
           />
         ))}
 
-      {rowLabels.map((l) => (
-        <text
-          key={l.row}
-          x={l.x}
-          y={l.y + 6}
-          textAnchor="end"
-          fontSize={18}
-          fontWeight={700}
-          fill="var(--muted)"
-          style={{ userSelect: "none", pointerEvents: "none" }}
-        >
-          {l.row + 1}
-        </text>
-      ))}
 
-      {/* Tomme plasser og reserverte spor */}
+      {/* Reserverte spor for solister */}
       {layout.gridSlots.map((s) => {
-        if (s.occupiedBy !== null && !s.reserved) return null;
+        if (!s.reserved) return null;
         const cx = dx(s.x);
         const cy = s.y * U;
-        const isTarget =
-          target?.type === "slot" && target.row === s.row && target.slot === s.slot;
-        if (s.reserved) {
-          return (
-            <ellipse
-              key={`${s.row}:${s.slot}`}
-              cx={cx}
-              cy={cy}
-              rx={RX}
-              ry={RY}
-              fill="none"
-              stroke="var(--muted)"
-              strokeWidth={2}
-              strokeDasharray="6 5"
-              opacity={0.6}
-            />
-          );
-        }
-        if (!editMode) return null;
         return (
-          <g key={`${s.row}:${s.slot}`} data-slot-row={s.row} data-slot-col={s.slot}>
-            <circle cx={cx} cy={cy} r={24} fill="transparent" />
-            <circle
-              cx={cx}
-              cy={cy}
-              r={showSlots ? 15 : 9}
-              fill={isTarget ? "var(--accent)" : showSlots ? "var(--accent)" : "none"}
-              fillOpacity={isTarget ? 0.55 : 0.15}
-              stroke="var(--accent)"
-              strokeWidth={2}
-              strokeDasharray="4 4"
-              opacity={showSlots ? 0.9 : 0.4}
-            />
-          </g>
+          <ellipse
+            key={`${s.row}:${s.slot}`}
+            cx={cx}
+            cy={cy}
+            rx={RX}
+            ry={RY}
+            fill="none"
+            stroke="var(--muted)"
+            strokeWidth={2}
+            strokeDasharray="6 5"
+            opacity={0.6}
+          />
         );
       })}
 
@@ -199,10 +163,23 @@ export function SceneContent(props: SceneContentProps) {
         const effGroupId = placement.overrideGroupId ?? singer.voiceGroupId;
         const lentText = describeLent(singer, placement.overrideGroupId, groups);
         const effGroup = groups.get(effGroupId);
+
+        let shiftX = 0;
+        if (
+          target?.type === "insert" &&
+          target.row === n.row &&
+          n.zone === "choir" &&
+          target.x !== undefined
+        ) {
+          const sep = (BODY_W * 0.38) * U;
+          if (n.x < target.x) shiftX = -sep;
+          else if (n.x > target.x) shiftX = sep;
+        }
+
         return (
           <NodeShape
             key={n.singerId}
-            cx={dx(n.x)}
+            cx={dx(n.x) + shiftX}
             cy={n.y * U}
             singer={singer}
             color={group?.color ?? "#94a3b8"}
@@ -223,16 +200,46 @@ export function SceneContent(props: SceneContentProps) {
         );
       })}
 
+      {/* Dynamisk opprettet plass ved innsetting mellom sangere */}
+      {target?.type === "insert" && target.x !== undefined && target.y !== undefined && (
+        <g
+          transform={`translate(${dx(target.x)} ${target.y * U})`}
+          className="transition-all duration-150"
+          style={{ pointerEvents: "none" }}
+        >
+          <ellipse
+            rx={RX + 2}
+            ry={RY + 2}
+            fill="rgba(99, 102, 241, 0.22)"
+            stroke="var(--accent)"
+            strokeWidth={2.5}
+            strokeDasharray="5 3"
+          />
+          <text
+            y={5}
+            textAnchor="middle"
+            fontSize={18}
+            fontWeight={700}
+            fill="var(--accent)"
+            style={{ userSelect: "none" }}
+          >
+            +
+          </text>
+        </g>
+      )}
+
       {/* Sanger som dras */}
       {drag &&
         (() => {
           const singer = singers.get(drag.id);
           if (!singer) return null;
           const group = groups.get(singer.voiceGroupId);
+          const dragX = target?.type === "insert" && target.x !== undefined ? target.x : drag.x;
+          const dragY = target?.type === "insert" && target.y !== undefined ? target.y : drag.y;
           return (
             <NodeShape
-              cx={drag.x * U}
-              cy={drag.y * U}
+              cx={dragX * U}
+              cy={dragY * U}
               singer={singer}
               color={group?.color ?? "#94a3b8"}
               groupAbbr={group?.abbr ?? "?"}
@@ -252,6 +259,65 @@ export function SceneContent(props: SceneContentProps) {
             />
           );
         })()}
+
+      {rowLabels.map((l) => {
+        const isSelected = selectedRow === l.row;
+        const adj = rowAdjustments?.[l.row];
+        const isAdjusted = !!adj && ((adj.shift ?? 0) !== 0 || (adj.spread ?? 100) !== 100);
+
+        if (!editMode) {
+          return (
+            <text
+              key={l.row}
+              x={l.x}
+              y={l.y + 6}
+              textAnchor="middle"
+              fontSize={16}
+              fontWeight={700}
+              fill="var(--muted)"
+              style={{ userSelect: "none", pointerEvents: "none" }}
+            >
+              {l.row + 1}
+            </text>
+          );
+        }
+
+        return (
+          <g
+            key={l.row}
+            data-row-id={l.row}
+            transform={`translate(${l.x} ${l.y})`}
+            style={{ cursor: "pointer" }}
+            className="transition-transform duration-100 active:scale-95"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRowClick?.(l.row);
+            }}
+          >
+            <circle r={22} fill="transparent" />
+            <circle
+              r={15}
+              fill={isSelected ? "var(--accent)" : isAdjusted ? "rgba(99, 102, 241, 0.18)" : "var(--card, #fff)"}
+              stroke={isSelected ? "var(--accent)" : isAdjusted ? "var(--accent)" : "rgba(15,23,42,0.35)"}
+              strokeWidth={isSelected || isAdjusted ? 2 : 1.5}
+              filter="drop-shadow(0 2px 3px rgba(0,0,0,0.15))"
+            />
+            <text
+              y={5}
+              textAnchor="middle"
+              fontSize={13}
+              fontWeight={700}
+              fill={isSelected ? "#fff" : isAdjusted ? "var(--accent)" : "var(--foreground, #0f172a)"}
+              style={{ userSelect: "none", pointerEvents: "none" }}
+            >
+              {l.row + 1}
+            </text>
+            {isAdjusted && !isSelected && (
+              <circle cx={10} cy={-10} r={3.5} fill="var(--accent)" />
+            )}
+          </g>
+        );
+      })}
     </g>
   );
 }
@@ -290,6 +356,7 @@ function NodeShape(p: NodeShapeProps) {
   return (
     <g
       transform={`translate(${p.cx} ${p.cy})`}
+      className="transition-transform duration-150 ease-out"
       data-node-id={p.interactive ? p.singer.id : undefined}
       opacity={p.ghost ? 0.3 : 1}
       style={p.interactive ? { cursor: "pointer" } : { pointerEvents: "none" }}
@@ -352,9 +419,8 @@ function NodeShape(p: NodeShapeProps) {
         rx={RX}
         ry={RY}
         fill={p.color}
-        stroke={p.lent ? "#0f172a" : "rgba(15,23,42,0.45)"}
-        strokeWidth={p.lent ? 3 : 1.5}
-        strokeDasharray={p.lent ? "6 4" : undefined}
+        stroke="rgba(15,23,42,0.45)"
+        strokeWidth={1.5}
         filter={p.lifted ? "drop-shadow(0 6px 6px rgba(0,0,0,.35))" : undefined}
       />
 
@@ -391,21 +457,6 @@ function NodeShape(p: NodeShapeProps) {
         )}
       </g>
 
-      {p.lent && (
-        <g style={{ pointerEvents: "none" }}>
-          <circle cx={RX - 3} cy={-RY + 3} r={8} fill="#fff" stroke="#0f172a" strokeWidth={1.5} />
-          <text
-            x={RX - 3}
-            y={-RY + 8}
-            fontSize={11}
-            textAnchor="middle"
-            fill="#b45309"
-            fontWeight={800}
-          >
-            ★
-          </text>
-        </g>
-      )}
       {p.pinned && (
         <g transform={`translate(${-RX + 3} ${RY - 3})`} style={{ pointerEvents: "none" }}>
           <circle r={8} fill="#fff" stroke="#0f172a" strokeWidth={1.5} />

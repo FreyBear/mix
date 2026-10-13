@@ -132,7 +132,7 @@ await step("konsert: opprett (alle aktive deltar), oppmøte, scener", async () =
   const sceneId = r.json.sceneId;
   const scene = r.json.scene;
   const placements = scene.placements.map((p, i) => (i === 0 ? { ...p, status: "solo" } : p));
-  r = await call("PUT", `/api/scenes/${sceneId}`, { title: "Sang 2b", settings: { ...scene.settings, choirWidthPct: 70, shape: "arc", arc: 60, zigzag: true }, placements });
+  r = await call("PUT", `/api/scenes/${sceneId}`, { title: "Sang 2b", settings: { ...scene.settings, choirWidthPct: 70, shape: "arc", arc: 60, singerSpacing: 80 }, placements });
   assert.equal(r.json.scene.title, "Sang 2b");
   assert.equal(r.json.scene.settings.choirWidthPct, 70);
   assert.equal(r.json.scene.placements[0].status, "solo");
