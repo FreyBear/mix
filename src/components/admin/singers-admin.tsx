@@ -125,6 +125,7 @@ function ImportDialog({
 }) {
   const toast = useToast();
   const [text, setText] = useState("");
+  const [replaceExisting, setReplaceExisting] = useState(false);
   const [busy, setBusy] = useState(false);
   const [skipped, setSkipped] = useState<{ line: number; text: string; reason: string }[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -135,7 +136,7 @@ function ImportDialog({
       const res = await api<{ added: number; skipped: { line: number; text: string; reason: string }[]; singers: Singer[] }>(
         "POST",
         "/api/singers/import",
-        { text },
+        { text, replaceExisting },
       );
       onDone(res.singers);
       setSkipped(res.skipped);
@@ -194,6 +195,17 @@ function ImportDialog({
           onChange={(e) => setText(e.target.value)}
           aria-label="Sangere som tekst"
         />
+        <label className="flex items-center gap-2.5 rounded-lg border border-amber-500/30 bg-amber-500/10 p-2.5 text-xs font-medium text-amber-800 dark:text-amber-300">
+          <input
+            type="checkbox"
+            className="h-4 w-4 rounded accent-amber-600"
+            checked={replaceExisting}
+            onChange={(e) => setReplaceExisting(e.target.checked)}
+          />
+          <span>
+            <strong>Erstatt alle eksisterende sangere:</strong> Sletter demodata og tidligere sangere før import.
+          </span>
+        </label>
         {skipped.length > 0 && (
           <div role="alert" className="rounded-lg border border-danger/40 bg-danger/10 p-2 text-danger">
             <p className="font-semibold">Hoppet over {skipped.length} linje(r):</p>
@@ -246,6 +258,19 @@ export function SingersAdmin({
     }
   };
 
+  const clearAllSingers = async () => {
+    if (!window.confirm("Er du sikker på at du vil slette ALLE sangere? (Dette fjerner demodata/nåværende sangere).")) {
+      return;
+    }
+    try {
+      const res = await api<{ singers: Singer[] }>("DELETE", "/api/singers");
+      onChange(res.singers);
+      toast("Alle sangere er slettet", "success");
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Kunne ikke slette", "error");
+    }
+  };
+
   const newDraft = (): Draft => ({
     fullName: "",
     nickname: "",
@@ -271,6 +296,11 @@ export function SingersAdmin({
           Vis inaktive
         </label>
         <div className="ml-auto flex gap-2">
+          {singers.length > 0 && (
+            <button className="btn text-danger hover:border-danger/40 hover:bg-danger/10" onClick={() => void clearAllSingers()}>
+              <Trash2 className="h-4 w-4" /> Slett alle
+            </button>
+          )}
           <button className="btn" onClick={() => setImporting(true)}>
             <FileUp className="h-4 w-4" /> Importer
           </button>

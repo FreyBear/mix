@@ -592,4 +592,33 @@ test("autentisering: admin kan tilbakestille dirigentpassord til 1234 med krav o
   assert.equal(aReset.mustChangePassword, true);
 });
 
+test("import: replaceExisting erstatter eksisterende sangere og sletter demodata", () => {
+  const testDb = openDb(":memory:");
+  seedDatabase(testDb);
+  assert.ok(listSingers(testDb).length >= 32, "demodata har minst 32 sangere");
+
+  const groups = listGroups(testDb);
+  const csv = "Navn;Kallenavn;Stemmegruppe;Høyde;Aktiv\nNy Sanger 1;S1;S;165;Ja\nNy Sanger 2;S2;A;170;Ja\nNy Sanger 3;S3;T;180;Ja\nNy Sanger 4;S4;B;185;Ja";
+  const parsed = parseSingerImport(csv, groups);
+  assert.equal(parsed.rows.length, 4);
+
+  // Simuler import med replaceExisting
+  testDb.transaction(() => {
+    testDb.prepare("DELETE FROM concert_attendance").run();
+    testDb.prepare("DELETE FROM singers").run();
+    const add = testDb.prepare(
+      `INSERT INTO singers (full_name, nickname, voice_group_id, height, is_active)
+       VALUES (?, ?, ?, ?, ?)`,
+    );
+    for (const r of parsed.rows) {
+      add.run(r.fullName, r.nickname, r.voiceGroupId, r.height, r.isActive ? 1 : 0);
+    }
+  })();
+
+  const newSingers = listSingers(testDb);
+  assert.equal(newSingers.length, 4, "kun de 4 nye sangerne finnes nå i databasen");
+  assert.equal(newSingers[0].fullName, "Ny Sanger 1");
+  assert.equal(newSingers[3].fullName, "Ny Sanger 4");
+});
+
 console.log(`\n${passed} tester OK`);

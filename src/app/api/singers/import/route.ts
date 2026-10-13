@@ -11,6 +11,7 @@ export async function POST(req: Request) {
   if (denied) return denied;
   const b = await readBody(req);
   const text = typeof b.text === "string" ? b.text : "";
+  const replaceExisting = b.replaceExisting === true;
   if (!text.trim()) return bad("Ingen tekst å importere");
   if (text.length > 500_000) return bad("Filen er for stor");
   const db = getDb();
@@ -20,6 +21,10 @@ export async function POST(req: Request) {
      VALUES (?, ?, ?, ?, ?)`,
   );
   db.transaction(() => {
+    if (replaceExisting) {
+      db.prepare("DELETE FROM concert_attendance").run();
+      db.prepare("DELETE FROM singers").run();
+    }
     for (const r of parsed.rows) {
       add.run(r.fullName, r.nickname, r.voiceGroupId, r.height, r.isActive ? 1 : 0);
     }

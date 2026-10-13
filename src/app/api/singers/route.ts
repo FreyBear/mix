@@ -22,3 +22,14 @@ export async function POST(req: Request) {
   ).run(fullName, nickname, groupId, Math.round(height), b.isActive === false ? 0 : 1);
   return ok({ singers: listSingers(db) }, 201);
 }
+
+export async function DELETE() {
+  const denied = await requireAdmin();
+  if (denied) return denied;
+  const db = getDb();
+  db.transaction(() => {
+    db.prepare("DELETE FROM concert_attendance").run();
+    db.prepare("DELETE FROM singers").run();
+  })();
+  return ok({ singers: [] });
+}

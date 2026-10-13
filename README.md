@@ -100,6 +100,7 @@ npm run typecheck                 # typekontroll med TypeScript
 npm run lint                      # kodekvalitetssjekk med ESLint
 npm run db:seed                   # fyll tom database med demodata
 npm run db:seed -- --reset        # slett alt og start på nytt med demodata
+npm run db:clear                  # slett all demodata (sangere, konserter, scener) for et tomt kor
 npm run auth:reset                # tilbakestill dirigent (1234) og admin (987654321)
 npm run auth:reset -- --conductor # tilbakestill kun dirigentpassord til 1234
 npm run auth:reset -- --admin     # tilbakestill kun adminpassord til 987654321
