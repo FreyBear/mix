@@ -1,19 +1,41 @@
 services:
   mixup:
     build: .
-    image: mixup:latest
+    image: ghcr.io/freybear/mix:latest
     restart: unless-stopped
     ports:
       - "3000:3000"
     environment:
-      # Dirigentens PIN-kode. Bytt denne!
+      # Start-PIN for dirigent ved første oppstart. Appen krever uansett passordbytte.
       ADMIN_PIN: "${ADMIN_PIN:-1234}"
-      # Hemmelighet for innloggings-cookie (valgfritt, men anbefalt).
+      # Hemmelighet for signering av innloggings-cookie.
       SESSION_SECRET: "${SESSION_SECRET:-}"
-      # Sett til true hvis appen står bak HTTPS.
-      COOKIE_SECURE: "${COOKIE_SECURE:-false}"
+      # Sett til true når appen kjører bak HTTPS / Cloudflare.
+      COOKIE_SECURE: "${COOKIE_SECURE:-true}"
+      # Sti til SQLite-databasen inne i containeren.
+      DATABASE_PATH: "${DATABASE_PATH:-/app/data/mixup.db}"
+      # Sett til false hvis du vil starte med en tom database uten demodata.
+      SEED_ON_EMPTY: "${SEED_ON_EMPTY:-true}"
     volumes:
       - mixup-data:/app/data
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  # Valgfritt: Watchtower sjekker jevnlig etter nye Docker-versjoner på GitHub
+  # og oppdaterer appen automatisk så snart en ny versjon er bygget på main.
+  watchtower:
+    image: containrrr/watchtower:latest
+    restart: unless-stopped
+    environment:
+      # Sjekkintervall i sekunder (300 sek = 5 minutter)
+      WATCHTOWER_POLL_INTERVAL: 300
+      # Fjern gamle Docker-images automatisk for å spare diskplass
+      WATCHTOWER_CLEANUP: "true"
+      # Oppdater kun containere som har etiketten 'watchtower.enable=true'
+      WATCHTOWER_LABEL_ENABLE: "true"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
 
 volumes:
   mixup-data:
+
