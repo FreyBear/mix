@@ -73,18 +73,32 @@ function writeLS(key: string, value: string | null) {
   }
 }
 
-function pickConcertId(concerts: Concert[]): number | null {
+function pickConcertId(concerts: Concert[], isAdmin = false): number | null {
   if (concerts.length === 0) return null;
   const params = new URLSearchParams(window.location.search);
   const fromUrl = Number(params.get("c"));
   if (concerts.some((c) => c.id === fromUrl)) return fromUrl;
+
   const fromLs = Number(readLS(LS.concert));
-  if (concerts.some((c) => c.id === fromLs)) return fromLs;
+  // Hvis dirigenten sist jobbet på en bestemt konsert, behold den for dirigenten
+  if (isAdmin && concerts.some((c) => c.id === fromLs)) {
+    return fromLs;
+  }
+
   const today = new Date().toISOString().slice(0, 10);
   const upcoming = concerts
-    .filter((c) => c.date && c.date >= today)
-    .sort((a, b) => (a.date! < b.date! ? -1 : 1));
-  return (upcoming[0] ?? concerts[0]).id;
+    .filter((c) => !c.date || c.date >= today)
+    .sort((a, b) => ((a.date ?? "9999") < (b.date ?? "9999") ? -1 : 1));
+
+  // For korister: Hvis det finnes kommende konserter, skal korister ALLTID se neste konsert som kommer.
+  // Hvis koristens mobil husker en gammel konsert fra fortiden, forkastes den.
+  if (upcoming.length > 0) {
+    const rememberedUpcoming = upcoming.find((c) => c.id === fromLs);
+    return (rememberedUpcoming ?? upcoming[0]).id;
+  }
+
+  if (concerts.some((c) => c.id === fromLs)) return fromLs;
+  return concerts[0].id;
 }
 
 export default function ConcertApp() {
@@ -120,7 +134,15 @@ function Viewer({
   const toast = useToast();
   const admin = boot.admin;
 
-  const [concertId, setConcertId] = useState<number | null>(() => pickConcertId(boot.concerts));
+  const [concertId, setConcertId] = useState<number | null>(() => pickConcertId(boot.concerts, boot.admin));
+  const visibleConcerts = useMemo(() => {
+    if (admin) return boot.concerts;
+    const today = new Date().toISOString().slice(0, 10);
+    const upcoming = boot.concerts
+      .filter((c) => !c.date || c.date >= today)
+      .sort((a, b) => ((a.date ?? "9999") < (b.date ?? "9999") ? -1 : 1));
+    return upcoming.length > 0 ? upcoming : boot.concerts;
+  }, [admin, boot.concerts]);
   const [cd, setCd] = useState<ConcertData | null>(null);
   const cdRef = useRef<ConcertData | null>(null);
   const [sceneId, setSceneId] = useState<number | null>(null);
@@ -650,7 +672,7 @@ function Viewer({
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 <span className="text-sm font-bold tracking-tight text-accent">Mixup</span>
-                {boot.concerts.length > 1 ? (
+                {visibleConcerts.length > 1 ? (
                   <select
                     aria-label="Konsert"
                     className="input h-9 max-w-[16rem] truncate py-1"
@@ -660,7 +682,7 @@ function Viewer({
                       setSceneId(null);
                     }}
                   >
-                    {boot.concerts.map((c) => (
+                    {visibleConcerts.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.name}
                         {c.date ? ` (${formatDate(c.date)})` : ""}
