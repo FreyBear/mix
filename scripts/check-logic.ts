@@ -28,6 +28,15 @@ import { createBackup, restoreBackup } from "../src/lib/backup";
 import { parseSingerImport } from "../src/lib/singer-import";
 import { DEFAULT_SETTINGS, type SceneSettings } from "../src/lib/types";
 import { VOICE_PROFILES } from "../src/lib/profiles";
+import {
+  changePassword,
+  ensureAuthConfig,
+  makeSessionToken,
+  parseSessionToken,
+  resetAdminPassword,
+  resetConductorPassword,
+  verifyLogin,
+} from "../src/lib/auth";
 
 let passed = 0;
 function test(name: string, fn: () => void) {
@@ -42,6 +51,7 @@ function test(name: string, fn: () => void) {
 }
 
 const db = openDb(":memory:");
+(globalThis as unknown as { __mixupDb?: typeof db }).__mixupDb = db;
 seedDatabase(db);
 const groups = listGroups(db);
 const singers = listSingers(db);
@@ -509,6 +519,77 @@ test("alle solo-oppsett og rader/amfi-kombinasjoner gir gyldig layout", () => {
       }
     }
   }
+});
+
+test("autentisering: standardpassord for dirigent (1234) og admin (987654321) krever passordbytte", () => {
+  ensureAuthConfig(db);
+
+  const c = verifyLogin("1234");
+  assert.equal(c.success, true);
+  assert.equal(c.role, "conductor");
+  assert.equal(c.mustChangePassword, true);
+
+  const a = verifyLogin("987654321");
+  assert.equal(a.success, true);
+  assert.equal(a.role, "superadmin");
+  assert.equal(a.mustChangePassword, true);
+
+  const fail = verifyLogin("helt-feil-kode");
+  assert.equal(fail.success, false);
+});
+
+test("autentisering: passordbytte fjerner mustChangePassword og ugyldiggjør gamle økter", () => {
+  const oldConductorToken = makeSessionToken("conductor");
+  assert.ok(parseSessionToken(oldConductorToken) !== null, "gammel token er gyldig før bytte");
+
+  changePassword("conductor", "ny-dirigent-kode-2026");
+  const c = verifyLogin("ny-dirigent-kode-2026");
+  assert.equal(c.success, true);
+  assert.equal(c.role, "conductor");
+  assert.equal(c.mustChangePassword, false);
+  assert.equal(verifyLogin("1234").success, false, "gammel standardkode fungerer ikke lenger");
+
+  // Gammel økttype skal være ugyldiggjort fordi passord-hashen endret seg
+  assert.equal(parseSessionToken(oldConductorToken), null, "gammel økt er ugyldig etter passordbytte");
+
+  const newConductorToken = makeSessionToken("conductor");
+  assert.ok(parseSessionToken(newConductorToken) !== null, "ny token er gyldig");
+
+  // Admin bytte
+  changePassword("superadmin", "ny-admin-kode-2026");
+  const a = verifyLogin("ny-admin-kode-2026");
+  assert.equal(a.success, true);
+  assert.equal(a.role, "superadmin");
+  assert.equal(a.mustChangePassword, false);
+  assert.equal(verifyLogin("987654321").success, false, "gammel adminkode fungerer ikke lenger");
+});
+
+test("autentisering: admin kan tilbakestille dirigentpassord til 1234 med krav om bytte", () => {
+  // Dirigent har for øyeblikket "ny-dirigent-kode-2026"
+  assert.equal(verifyLogin("ny-dirigent-kode-2026").success, true);
+
+  // Admin tilbakestiller dirigent
+  resetConductorPassword();
+
+  // Nå skal dirigenten være tilbake på 1234 med krav om bytte
+  const c = verifyLogin("1234");
+  assert.equal(c.success, true);
+  assert.equal(c.role, "conductor");
+  assert.equal(c.mustChangePassword, true);
+  assert.equal(verifyLogin("ny-dirigent-kode-2026").success, false, "tidligere passord er ugyldiggjort");
+
+  // Adminpassordet ("ny-admin-kode-2026") skal være uberørt
+  const a = verifyLogin("ny-admin-kode-2026");
+  assert.equal(a.success, true);
+  assert.equal(a.role, "superadmin");
+  assert.equal(a.mustChangePassword, false);
+
+  // Tilbakestill admin via hjelpefunksjon
+  resetAdminPassword();
+  const aReset = verifyLogin("987654321");
+  assert.equal(aReset.success, true);
+  assert.equal(aReset.role, "superadmin");
+  assert.equal(aReset.mustChangePassword, true);
 });
 
 console.log(`\n${passed} tester OK`);

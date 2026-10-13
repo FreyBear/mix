@@ -7,9 +7,11 @@ import { ArrowLeft, Lock, LockOpen } from "lucide-react";
 import { api } from "@/lib/client/api";
 import { useBootstrap } from "@/lib/client/use-bootstrap";
 import { PinDialog } from "../pin-dialog";
+import { ChangePasswordDialog } from "../change-password-dialog";
 import { BackupAdmin } from "./backup-admin";
 import { ConcertsAdmin } from "./concerts-admin";
 import { GroupsAdmin } from "./groups-admin";
+import { SecurityAdmin } from "./security-admin";
 import { SingersAdmin } from "./singers-admin";
 import { VenuesAdmin } from "./venues-admin";
 
@@ -19,6 +21,7 @@ const TABS = [
   { id: "venues", label: "Lokasjoner" },
   { id: "concerts", label: "Konserter" },
   { id: "backup", label: "Sikkerhetskopi" },
+  { id: "security", label: "Sikkerhet" },
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
 
@@ -50,7 +53,7 @@ export default function AdminApp() {
       <div className="flex h-dvh flex-col items-center justify-center gap-4 p-6 text-center">
         <Lock className="h-10 w-10 text-muted" />
         <h1 className="text-xl font-semibold">Administrasjon</h1>
-        <p className="max-w-sm text-sm text-muted">Området er beskyttet med dirigentens PIN-kode.</p>
+        <p className="max-w-sm text-sm text-muted">Området er beskyttet med dirigent- eller adminpassord.</p>
         <PinDialog onClose={() => router.push("/")} onSuccess={() => void reload()} />
       </div>
     );
@@ -106,7 +109,19 @@ export default function AdminApp() {
           />
         )}
         {tab === "backup" && <BackupAdmin onRestored={() => void reload()} />}
+        {tab === "security" && (
+          <SecurityAdmin superadmin={data.superadmin} onPasswordChanged={() => void reload()} />
+        )}
       </main>
+
+      {data.mustChangePassword && (
+        <ChangePasswordDialog
+          role={data.superadmin ? "superadmin" : "conductor"}
+          isMandatory
+          onSuccess={() => void reload()}
+          onClose={() => void logout()}
+        />
+      )}
     </div>
   );
 }

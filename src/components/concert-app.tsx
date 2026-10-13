@@ -37,6 +37,7 @@ import { BenchDrawer } from "./bench-drawer";
 import { StageSetupCard } from "./stage-setup-card";
 import { SongMenuDialog } from "./song-menu-dialog";
 import { PinDialog } from "./pin-dialog";
+import { ChangePasswordDialog } from "./change-password-dialog";
 import { PrintSheet } from "./print-sheet";
 import { SingerCard } from "./singer-card";
 import { RowAdjustmentCard } from "./row-adjustment-card";
@@ -627,6 +628,14 @@ function Viewer({
             }}
           />
         )}
+        {boot.admin && boot.mustChangePassword && (
+          <ChangePasswordDialog
+            role={boot.superadmin ? "superadmin" : "conductor"}
+            isMandatory
+            onSuccess={() => void reload()}
+            onClose={() => void logout()}
+          />
+        )}
       </div>
     );
   }
@@ -923,6 +932,14 @@ function Viewer({
               await reload();
               toast("Dirigentmodus er låst opp", "success");
             }}
+          />
+        )}
+        {boot.admin && boot.mustChangePassword && (
+          <ChangePasswordDialog
+            role={boot.superadmin ? "superadmin" : "conductor"}
+            isMandatory
+            onSuccess={() => void reload()}
+            onClose={() => void logout()}
           />
         )}
         {showAttendance && concert && cd && (

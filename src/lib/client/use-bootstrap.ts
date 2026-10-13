@@ -6,6 +6,9 @@ import type { Concert, Singer, Template, Venue, VoiceGroup } from "../types";
 
 export interface Bootstrap {
   admin: boolean;
+  superadmin: boolean;
+  mustChangePassword: boolean;
+  role: "none" | "conductor" | "superadmin";
   groups: VoiceGroup[];
   singers: Singer[];
   venues: Venue[];
