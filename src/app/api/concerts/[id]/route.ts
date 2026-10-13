@@ -1,7 +1,7 @@
 import { getDb } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth";
 import { bad, dateOrNull, numIn, ok, parseId, readBody, str } from "@/lib/http";
-import { attendingIds, getConcert, listConcerts, listScenes } from "@/lib/repo";
+import { attendingIds, getConcert, listConcerts, listScenes, listVenues } from "@/lib/repo";
 
 export const dynamic = "force-dynamic";
 type Ctx = { params: Promise<{ id: string }> };
@@ -32,6 +32,9 @@ export async function PUT(req: Request, { params }: Ctx) {
   const d = numIn(b.stageDepth, 2, 60);
   if (!name || w === null || d === null) return bad("Navn og scenemål kreves");
   const db = getDb();
+  if (venueId !== null && !listVenues(db).some((v) => v.id === venueId)) {
+    return bad("Ukjent lokasjon");
+  }
   const info = db
     .prepare(
       `UPDATE concerts SET name = ?, date = ?, venue_id = ?, stage_width = ?, stage_depth = ?

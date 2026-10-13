@@ -30,6 +30,9 @@ export async function DELETE(_req: Request, { params }: Ctx) {
   const id = parseId((await params).id);
   if (!id) return bad("Ugyldig id");
   const db = getDb();
+  if (listGroups(db).length <= 1) {
+    return bad("Koret må ha minst én stemmegruppe", 409);
+  }
   const used = db.prepare("SELECT COUNT(*) AS n FROM singers WHERE voice_group_id = ?").get(id) as {
     n: number;
   };

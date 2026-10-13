@@ -500,10 +500,12 @@ test("individuell radjustering: forskyving og utstrekning fungerer, og nullstill
 test("alle solo-oppsett og rader/amfi-kombinasjoner gir gyldig layout", () => {
   for (const shape of ["rows", "arc"] as const) {
     for (const spacing of [60, 75, 95]) {
-      for (const pct of [50, 90]) {
-        const l = computeLayout(8, 5, { ...DEFAULT_SETTINGS, singerSpacing: spacing, choirWidthPct: pct, arc: shape === "arc" ? 100 : 0 }, items(s1));
-        assert.equal(l.nodes.length, 32);
-        assert.ok(l.nodes.every((n) => Number.isFinite(n.x) && Number.isFinite(n.y)));
+      for (const pct of [30, 50, 90]) {
+        for (const rows of [1, 3, 6]) {
+          const l = computeLayout(8, 5, { ...DEFAULT_SETTINGS, rowsAuto: false, rows, singerSpacing: spacing, choirWidthPct: pct, arc: shape === "arc" ? 100 : 0 }, items(s1));
+          assert.equal(l.nodes.length, 32);
+          assert.ok(l.nodes.every((n) => Number.isFinite(n.x) && Number.isFinite(n.y)));
+        }
       }
     }
   }

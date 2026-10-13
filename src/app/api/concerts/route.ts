@@ -1,7 +1,7 @@
 import { getDb } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth";
 import { bad, dateOrNull, numIn, ok, readBody, str } from "@/lib/http";
-import { insertScene, listConcerts, listGroups, listSingers } from "@/lib/repo";
+import { insertScene, listConcerts, listGroups, listSingers, listVenues } from "@/lib/repo";
 import { createInitialState } from "@/lib/placement";
 import { DEFAULT_SETTINGS } from "@/lib/types";
 
@@ -18,6 +18,9 @@ export async function POST(req: Request) {
   const d = numIn(b.stageDepth, 2, 60);
   if (!name || w === null || d === null) return bad("Navn og scenemål kreves");
   const db = getDb();
+  if (venueId !== null && !listVenues(db).some((v) => v.id === venueId)) {
+    return bad("Ukjent lokasjon");
+  }
 
   const id = db.transaction(() => {
     const info = db

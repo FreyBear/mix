@@ -22,7 +22,7 @@ async function networkFirst(request, cacheName) {
   const cache = await caches.open(cacheName);
   try {
     const fresh = await fetch(request);
-    if (fresh.ok) cache.put(request, fresh.clone());
+    if (fresh.ok) cache.put(request.url, fresh.clone());
     return fresh;
   } catch (err) {
     const cached = await cache.match(request);
@@ -36,7 +36,7 @@ async function cacheFirst(request, cacheName) {
   const cached = await cache.match(request);
   if (cached) return cached;
   const fresh = await fetch(request);
-  if (fresh.ok) cache.put(request, fresh.clone());
+  if (fresh.ok) cache.put(request.url, fresh.clone());
   return fresh;
 }
 

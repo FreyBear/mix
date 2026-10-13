@@ -103,11 +103,15 @@ export function computeLayout(
   // arc 0 = rette rader, 100 = halvsirkel. Bakerste rad får bredden `cw`.
   const arcOn = settings.arc > 0;
   const theta = arcOn ? (settings.arc / 100) * Math.PI : 0;
-  const Rb = arcOn ? cw / (2 * Math.sin(theta / 2)) : Infinity;
+  const Rb = arcOn ? Math.max(0.6, cw / (2 * Math.sin(theta / 2))) : Infinity;
   // Forreste rad får ikke mindre radius enn at plassene langs buen er minst ~0,62 m.
-  const Rmin = arcOn ? Math.max(0.5, (C * 0.62) / theta) : 0;
-  const radialFor = (rs: number) =>
-    rows > 1 ? Math.max(0.5, Math.min(rs, (Rb - Rmin) / (rows - 1))) : rs;
+  const Rmin = arcOn ? Math.max(0.4, (C * 0.62) / theta) : 0;
+  const radialFor = (rs: number) => {
+    if (rows <= 1) return rs;
+    const maxRadial = Math.max(0.1, (Rb - 0.4) / (rows - 1));
+    const target = Rb > Rmin ? (Rb - Rmin) / (rows - 1) : maxRadial;
+    return Math.min(rs, Math.max(0.1, Math.min(maxRadial, target)));
+  };
   const pos = (r: number, i: number, rs: number) => {
     const f = fracOf(r, i);
     const adj = settings.rowAdjustments?.[r];
@@ -120,7 +124,7 @@ export function computeLayout(
         y: r * rs,
       };
     }
-    const R = Rb - (rows - 1 - r) * radialFor(rs);
+    const R = Math.max(0.4, Rb - (rows - 1 - r) * radialFor(rs));
     const shiftAngle = R > 0.01 ? shift / R : 0;
     const th = (f - 0.5) * theta * spread + shiftAngle;
     return { x: cx + R * Math.sin(th), y: R * Math.cos(th) };

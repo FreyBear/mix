@@ -52,6 +52,9 @@ const CHOIR: [string, string, string, number][] = [
 /** Fyller en tom database med blandakor, lokasjoner og en demokonsert. */
 export function seedDatabase(db: Db) {
   db.transaction(() => {
+    const existing = db.prepare("SELECT COUNT(*) AS n FROM voice_groups").get() as { n: number };
+    if (existing.n > 0) return;
+
     const addGroup = db.prepare(
       "INSERT INTO voice_groups (name, abbr, color, sort_order) VALUES (?, ?, ?, ?)",
     );
