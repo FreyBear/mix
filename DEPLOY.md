@@ -148,13 +148,19 @@ docker compose up -d
 
 ---
 
-## 6. Sikkerhetskopi (Backup)
+## 6. Sikkerhetskopi (Backup) og Google Drive
 
-Databasen ligger i Docker-volumet `mixup-data`. Du har to måter å ta backup på:
+Mixup har et helautomatisert backup-system med støtte for Google Drive (eller andre skytjenester som OneDrive, Dropbox, S3):
 
-1. **Via nettleseren:** Gå til `/admin` → *Sikkerhetskopi* → *Last ned*. Dette gir en komplett JSON-fil som kan gjenopprettes på samme side.
-2. **Direkte fra serveren:**
+1. **Automatisert nattlig backup til Google Drive (Anbefalt):**
+   * Se den komplette guiden i [BACKUP.md](BACKUP.md) for oppsett med `rclone` og `crontab`.
+   * Skriptet `~/mix/scripts/backup.sh` tar et 100 % transaksjonssikkert SQLite-snapshot, dumper en portabel JSON-backup, komprimerer og laster opp til Google Drive.
+2. **Manuell backup fra serveren:**
    ```bash
-   # Kopier databasefilen ut fra containeren:
-   docker compose cp mixup:/app/data/mixup.db ~/mixup-backup-$(date +%F).db
+   ~/mix/scripts/backup.sh
    ```
+3. **Gjenoppretting:**
+   ```bash
+   ~/mix/scripts/restore.sh ~/mixup-backups/mixup-backup-YYYY-MM-DD_HHMMSS.tar.gz
+   ```
+4. **Via nettleseren:** Gå til `/admin` → *Sikkerhetskopi* → *Last ned*. Dette gir en komplett JSON-fil som kan gjenopprettes på samme side.

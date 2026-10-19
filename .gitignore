@@ -42,4 +42,9 @@ next-env.d.ts
 
 # Mixup
 /data/
+/backups/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
 !.env.example
