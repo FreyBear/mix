@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { api } from "./api";
-import type { Concert, Singer, Template, Venue, VoiceGroup } from "../types";
+import type { Concert, PlacementPreset, Singer, Template, Venue, VoiceGroup } from "../types";
 
 export interface Bootstrap {
   admin: boolean;
@@ -14,6 +14,7 @@ export interface Bootstrap {
   venues: Venue[];
   concerts: Concert[];
   templates: Template[];
+  presets: PlacementPreset[];
 }
 
 export function useBootstrap() {

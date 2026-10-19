@@ -4,6 +4,7 @@ import {
   sanitizeSettings,
   type Concert,
   type Placement,
+  type PlacementPreset,
   type Scene,
   type SceneSettings,
   type Singer,
@@ -11,7 +12,7 @@ import {
   type Venue,
   type VoiceGroup,
 } from "./types";
-import { reconcile, type PlacementCtx } from "./placement";
+import { getBuiltInPresets, reconcile, type PlacementCtx } from "./placement";
 
 type Db = Database.Database;
 
@@ -261,3 +262,55 @@ export function scrubGroupFromScenes(db: Db, groupId: number) {
     }
   }
 }
+
+export function listCustomPresets(db: Db): PlacementPreset[] {
+  const row = db.prepare("SELECT value FROM app_config WHERE key = 'placement_presets'").get() as
+    | { value: string }
+    | undefined;
+  if (!row) return [];
+  try {
+    const parsed = JSON.parse(row.value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveCustomPreset(
+  db: Db,
+  preset: Omit<PlacementPreset, "builtIn">,
+): PlacementPreset {
+  const custom = listCustomPresets(db);
+  const clean: PlacementPreset = {
+    id: preset.id || `custom-${Date.now()}`,
+    name: preset.name.trim(),
+    type: preset.type || "blocks",
+    groupOrder: preset.groupOrder || [],
+    builtIn: false,
+  };
+  const idx = custom.findIndex((p) => p.id === clean.id);
+  if (idx >= 0) {
+    custom[idx] = clean;
+  } else {
+    custom.push(clean);
+  }
+  db.prepare(
+    "INSERT INTO app_config (key, value) VALUES ('placement_presets', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+  ).run(JSON.stringify(custom));
+  return clean;
+}
+
+export function deleteCustomPreset(db: Db, id: string): void {
+  const custom = listCustomPresets(db).filter((p) => p.id !== id);
+  db.prepare(
+    "INSERT INTO app_config (key, value) VALUES ('placement_presets', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+  ).run(JSON.stringify(custom));
+}
+
+export function listAllPresets(db: Db): PlacementPreset[] {
+  const groups = listGroups(db);
+  const builtIn = getBuiltInPresets(groups);
+  const custom = listCustomPresets(db);
+  return [...builtIn, ...custom];
+}
+

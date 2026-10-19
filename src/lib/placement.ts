@@ -1,5 +1,7 @@
 import type {
+  AutoSortOptions,
   Placement,
+  PlacementPreset,
   SceneSettings,
   Singer,
   VoiceGroup,
@@ -23,6 +25,69 @@ export function sortedGroups(groups: VoiceGroup[]): VoiceGroup[] {
   return [...groups].sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id);
 }
 
+export function resolveGroupOrder(
+  pattern: "SATB" | "TSAB" | "STBA",
+  groups: VoiceGroup[],
+): number[] {
+  const sorted = [...groups].sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id);
+  const byLetter: Record<string, VoiceGroup[]> = { S: [], A: [], T: [], B: [], other: [] };
+
+  for (const g of sorted) {
+    const key = (g.abbr || g.name).trim().toUpperCase();
+    if (key.startsWith("S")) byLetter.S.push(g);
+    else if (key.startsWith("A")) byLetter.A.push(g);
+    else if (key.startsWith("T")) byLetter.T.push(g);
+    else if (key.startsWith("B")) byLetter.B.push(g);
+    else byLetter.other.push(g);
+  }
+
+  const orderKeys =
+    pattern === "SATB"
+      ? ["S", "A", "T", "B"]
+      : pattern === "TSAB"
+      ? ["T", "S", "A", "B"]
+      : ["S", "T", "B", "A"];
+
+  const res: number[] = [];
+  for (const k of orderKeys) {
+    for (const g of byLetter[k]) res.push(g.id);
+  }
+  for (const g of byLetter.other) res.push(g.id);
+  return res;
+}
+
+export function getBuiltInPresets(groups: VoiceGroup[]): PlacementPreset[] {
+  return [
+    {
+      id: "satb",
+      name: "SATB (Klassisk: S – A – T – B)",
+      type: "blocks",
+      groupOrder: resolveGroupOrder("SATB", groups),
+      builtIn: true,
+    },
+    {
+      id: "tsab",
+      name: "TSAB (Tenor venstre: T – S – A – B)",
+      type: "blocks",
+      groupOrder: resolveGroupOrder("TSAB", groups),
+      builtIn: true,
+    },
+    {
+      id: "stba",
+      name: "STBA (Flanker: S – T – B – A)",
+      type: "blocks",
+      groupOrder: resolveGroupOrder("STBA", groups),
+      builtIn: true,
+    },
+    {
+      id: "mixed",
+      name: "🎲 Fullstendig miks (Spredt)",
+      type: "mixed",
+      builtIn: true,
+    },
+  ];
+}
+
 export function effectiveGroupId(p: Placement, singer: Singer): number {
   return p.overrideGroupId ?? singer.voiceGroupId;
 }
@@ -40,8 +105,53 @@ function occupiedSet(placements: Placement[], except?: number): Set<string> {
   return set;
 }
 
+function arrangeMixedRow(
+  rowMembers: Placement[],
+  prevRowGroups: number[] | undefined,
+  sMap: Map<number, Singer>,
+  rng: () => number,
+): Placement[] {
+  if (rowMembers.length <= 1) return rowMembers;
+
+  let bestList = rowMembers.slice();
+  let minPenalty = Infinity;
+
+  const scorePermutation = (arr: Placement[]): number => {
+    let penalty = 0;
+    for (let i = 0; i < arr.length; i++) {
+      const gCurrent = effectiveGroupId(arr[i], sMap.get(arr[i].singerId)!);
+      if (i > 0) {
+        const gLeft = effectiveGroupId(arr[i - 1], sMap.get(arr[i - 1].singerId)!);
+        if (gCurrent === gLeft) penalty += 10;
+      }
+      if (prevRowGroups && i < prevRowGroups.length) {
+        if (gCurrent === prevRowGroups[i]) penalty += 3;
+      }
+    }
+    return penalty;
+  };
+
+  const iterations = Math.min(100, Math.max(30, rowMembers.length * 5));
+  for (let it = 0; it < iterations; it++) {
+    const candidate = rowMembers.slice();
+    for (let i = candidate.length - 1; i > 0; i--) {
+      const j = Math.floor(rng() * (i + 1));
+      [candidate[i], candidate[j]] = [candidate[j], candidate[i]];
+    }
+    const penalty = scorePermutation(candidate);
+    if (penalty < minPenalty) {
+      minPenalty = penalty;
+      bestList = candidate;
+      if (minPenalty === 0) break;
+    }
+  }
+
+  return bestList;
+}
+
 /**
- * Sorterer korister etter stemmegruppe (blokker fra venstre) og høyde (høyest bakerst).
+ * Sorterer korister etter stemmegruppe (blokker fra venstre) og høyde (høyest bakerst),
+ * eller som en optimalisert fullstendig miks.
  *
  * Endres antall rader, følger låste sangere sin kant: låst på forreste rad blir på forreste rad,
  * låst på bakerste rad blir på bakerste rad, og låst i en midtrad mister låsen.
@@ -52,6 +162,7 @@ export function autoSort(
   settings: SceneSettings,
   ctx: PlacementCtx,
   prevRows?: number,
+  options?: AutoSortOptions,
 ): PlacementState {
   const sMap = new Map(ctx.singers.map((s) => [s.id, s]));
   const members0 = placements.filter((p) => p.status !== "bench" && sMap.has(p.singerId));
@@ -168,7 +279,72 @@ export function autoSort(
     capSum++;
   }
 
-  const groupOrder = sortedGroups(ctx.groups).map((g) => g.id);
+  if (options?.mode === "mixed") {
+    // --- FULLSTENDIG MIKS ---
+    // Enkel pseudotilfeldig generator hvis seed er spesifisert, ellers Math.random
+    let seedVal = options.seed !== undefined ? Math.abs(options.seed) : Math.random() * 100000;
+    const rng = () => {
+      seedVal = (seedVal * 9301 + 49297) % 233280;
+      return seedVal / 233280;
+    };
+
+    // 1. Sorter frie korister etter høyde stigende (laveste foran, høyeste bakerst)
+    const sortedFree = free.slice().sort((a, b) => {
+      const ha = sMap.get(a.singerId)!.height;
+      const hb = sMap.get(b.singerId)!.height;
+      return ha - hb || (rng() - 0.5);
+    });
+
+    // 2. Fordel koristene på radene iht. radkapasiteten (cap[r])
+    const rowFreeMembers: Placement[][] = Array.from({ length: rows }, () => []);
+    let fIdx = 0;
+    for (let r = 0; r < rows; r++) {
+      const take = cap[r];
+      rowFreeMembers[r] = sortedFree.slice(fIdx, fIdx + take);
+      fIdx += take;
+    }
+
+    // 3. For hver rad: optimaliser spredning av stemmegrupper (minimere naboer med samme stemme)
+    const assigned = new Map<number, { row: number; slot: number }>();
+    let C = 1;
+    const rowGroupAtSlot: number[][] = Array.from({ length: rows }, () => []);
+
+    for (let r = 0; r < rows; r++) {
+      const membersInRow = rowFreeMembers[r];
+      const mixedOrder = arrangeMixedRow(
+        membersInRow,
+        r > 0 ? rowGroupAtSlot[r - 1] : undefined,
+        sMap,
+        rng,
+      );
+
+      const rowPinned = pinned.filter((q) => q.row === r).sort((a, b) => a.slot - b.slot);
+      const seq: Placement[] = [...mixedOrder];
+      for (const p of rowPinned) {
+        seq.splice(Math.min(Math.max(p.slot, 0), seq.length), 0, p);
+      }
+
+      rowGroupAtSlot[r] = [];
+      seq.forEach((p, i) => {
+        assigned.set(p.singerId, { row: r, slot: i });
+        rowGroupAtSlot[r][i] = effectiveGroupId(p, sMap.get(p.singerId)!);
+      });
+      C = Math.max(C, seq.length);
+    }
+
+    const next = placements.map((p) => {
+      const a = assigned.get(p.singerId);
+      const base = unpinned.has(p.singerId) ? { ...p, pinned: false } : p;
+      return a ? { ...base, row: a.row, slot: a.slot } : base;
+    });
+    return { placements: next, settings: { ...settings, rows, slots: C, rowAdjustments: undefined } };
+  }
+
+  // --- BLOKKSORTERING (SATB, TSAB, STBA eller egendefinert rekkefølge) ---
+  const defaultOrder = sortedGroups(ctx.groups).map((g) => g.id);
+  const groupOrder =
+    options?.groupOrder && options.groupOrder.length > 0 ? options.groupOrder : defaultOrder;
+
   const byGroup = new Map<number, Placement[]>();
   for (const p of free) {
     const gid = effectiveGroupId(p, sMap.get(p.singerId)!);

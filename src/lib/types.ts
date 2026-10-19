@@ -91,6 +91,20 @@ export interface Template {
   createdAt: string;
 }
 
+export interface PlacementPreset {
+  id: string;
+  name: string;
+  type: "blocks" | "mixed";
+  groupOrder?: number[];
+  builtIn?: boolean;
+}
+
+export interface AutoSortOptions {
+  mode?: "blocks" | "mixed";
+  groupOrder?: number[];
+  seed?: number;
+}
+
 export const DEFAULT_SETTINGS: SceneSettings = {
   singerSpacing: 75,
   choirWidthPct: 90,

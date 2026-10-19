@@ -20,6 +20,7 @@ import { describeLent, formatDate } from "@/lib/client/format";
 import { computeLayout } from "@/lib/layout";
 import {
   autoSort,
+  getBuiltInPresets,
   moveSinger,
   reconcile,
   setOverride,
@@ -31,7 +32,7 @@ import {
   type PlacementCtx,
   type PlacementState,
 } from "@/lib/placement";
-import type { Concert, Scene, SceneSettings } from "@/lib/types";
+import type { Concert, PlacementPreset, Scene, SceneSettings } from "@/lib/types";
 import { AttendanceDialog } from "./attendance-dialog";
 import { BenchDrawer } from "./bench-drawer";
 import { StageSetupCard } from "./stage-setup-card";
@@ -161,6 +162,17 @@ function Viewer({
   const [saving, setSaving] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const stage = useRef<StageHandle | null>(null);
+
+  const [selectedPresetId, setSelectedPresetId] = useState<string>("satb");
+  const [presets, setPresets] = useState<PlacementPreset[]>(() =>
+    boot.presets && boot.presets.length > 0 ? boot.presets : getBuiltInPresets(boot.groups),
+  );
+
+  useEffect(() => {
+    if (boot.presets && boot.presets.length > 0) {
+      setPresets(boot.presets);
+    }
+  }, [boot.presets]);
 
   // ---- Lagring ----------------------------------------------------------
   const localVersion = useRef(0);
@@ -487,11 +499,64 @@ function Viewer({
     changeSettings({ rowAdjustments: clean });
   }, [selectedRow, scene, changeSettings]);
 
-  const doAutoSort = () => {
+  const handleApplyPreset = (preset: PlacementPreset) => {
     if (!scene || !ctx) return;
-    if (!window.confirm("Auto-sortere oppstillingen etter stemmegruppe og høyde? Låste plasser blir stående.")) return;
     setSelectedRow(null);
-    applyState(autoSort(scene.placements, { ...scene.settings, rowAdjustments: undefined }, ctx));
+    const isMixed = preset.type === "mixed";
+    applyState(
+      autoSort(
+        scene.placements,
+        { ...scene.settings, rowAdjustments: undefined },
+        ctx,
+        undefined,
+        {
+          mode: preset.type,
+          groupOrder: preset.groupOrder,
+          seed: Math.random() * 100000,
+        },
+      ),
+    );
+    toast(isMixed ? "Genererte ny kormiks 🎲" : `Sortert: ${preset.name}`, "success");
+  };
+
+  const handleCreateCustomPreset = async (name: string, groupOrder: number[]) => {
+    try {
+      const res = await api<{ presets: PlacementPreset[] }>("POST", "/api/presets", {
+        name,
+        groupOrder,
+        type: "blocks",
+      });
+      setPresets(res.presets);
+      const created = res.presets.find((p) => p.name === name.trim());
+      if (created) {
+        setSelectedPresetId(created.id);
+        handleApplyPreset(created);
+      }
+      toast(`Opprettet forvalg «${name}»`, "success");
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Kunne ikke opprette forvalg", "error");
+    }
+  };
+
+  const handleDeleteCustomPreset = async (presetId: string) => {
+    try {
+      const res = await api<{ presets: PlacementPreset[] }>("DELETE", `/api/presets/${presetId}`);
+      setPresets(res.presets);
+      if (selectedPresetId === presetId) {
+        setSelectedPresetId("satb");
+      }
+      toast("Slettet forvalg", "success");
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Kunne ikke slette forvalg", "error");
+    }
+  };
+
+  const doAutoSort = () => {
+    const active =
+      presets.find((p) => p.id === selectedPresetId) ||
+      presets.find((p) => p.id === "satb") ||
+      presets[0];
+    if (active) handleApplyPreset(active);
   };
 
   const doCopyPrev = () => {
@@ -879,6 +944,13 @@ function Viewer({
                   onSettings={changeSettings}
                   onAutoSort={doAutoSort}
                   onClose={() => setShowSetup(false)}
+                  presets={presets}
+                  groups={boot.groups}
+                  selectedPresetId={selectedPresetId}
+                  onSelectPreset={setSelectedPresetId}
+                  onApplyPreset={handleApplyPreset}
+                  onCreateCustomPreset={handleCreateCustomPreset}
+                  onDeleteCustomPreset={handleDeleteCustomPreset}
                 />
               </div>
             )}

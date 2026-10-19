@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import {
+  listAllPresets,
   listConcerts,
   listGroups,
   listSingers,
@@ -29,5 +30,6 @@ export async function GET() {
     venues: listVenues(db),
     concerts: listConcerts(db),
     templates: listTemplates(db),
+    presets: listAllPresets(db),
   });
 }
