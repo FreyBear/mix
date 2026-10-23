@@ -22,6 +22,7 @@ interface GroupRow {
   abbr: string;
   color: string;
   sort_order: number;
+  category?: string | null;
 }
 interface SingerRow {
   id: number;
@@ -68,6 +69,7 @@ export const toGroup = (r: GroupRow): VoiceGroup => ({
   abbr: r.abbr,
   color: r.color,
   sortOrder: r.sort_order,
+  category: r.category ?? null,
 });
 export const toSinger = (r: SingerRow): Singer => ({
   id: r.id,

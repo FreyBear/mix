@@ -5,6 +5,7 @@ import { api } from "@/lib/client/api";
 import { useToast } from "./toast";
 import { Modal } from "./modal";
 import type { Concert, Scene, Singer, VoiceGroup } from "@/lib/types";
+import { compareVoiceGroups } from "@/lib/voice-family";
 
 interface Updated {
   attendingIds: number[];
@@ -33,7 +34,7 @@ export function AttendanceDialog({
   const [query, setQuery] = useState("");
 
   const visible = singers.filter((s) => s.isActive || attending.has(s.id));
-  const sortedGroups = [...groups].sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id);
+  const sortedGroups = [...groups].sort(compareVoiceGroups);
   const q = query.trim().toLowerCase();
   const matches = (s: Singer) =>
     !q || s.fullName.toLowerCase().includes(q) || s.nickname.toLowerCase().includes(q);

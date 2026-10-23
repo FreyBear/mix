@@ -39,6 +39,12 @@ import {
   resetConductorPassword,
   verifyLogin,
 } from "../src/lib/auth";
+import {
+  compareVoiceGroups,
+  groupVoiceGroupsByFamily,
+  identifyVoiceFamily,
+  matchesGroupFilter,
+} from "../src/lib/voice-family";
 
 let passed = 0;
 function test(name: string, fn: () => void) {
@@ -642,6 +648,69 @@ test("forvalg: SSTTBBAA Vanlig plasserer A2 før A1", () => {
   if (!stba) throw new Error("Fant ikke stba preset");
   assert.equal(stba.name, "SSTTBBAA Vanlig");
   assert.deepEqual(stba.groupOrder, [1, 2, 5, 6, 7, 8, 4, 3]);
+});
+
+test("stemmefamilie: identifiserer kormusikk-stemmer og utvidede grupper", () => {
+  assert.equal(identifyVoiceFamily({ name: "Sopran 1", abbr: "S1" }), "sopran");
+  assert.equal(identifyVoiceFamily({ name: "Sopran 2", abbr: "S2" }), "sopran");
+  assert.equal(identifyVoiceFamily({ name: "Sopran", abbr: "S" }), "sopran");
+  assert.equal(identifyVoiceFamily({ name: "Mezzosopran", abbr: "MS" }), "mezzosopran");
+  assert.equal(identifyVoiceFamily({ name: "Alt 1", abbr: "A1" }), "alt");
+  assert.equal(identifyVoiceFamily({ name: "Alt 2", abbr: "A2" }), "alt");
+  assert.equal(identifyVoiceFamily({ name: "Alt", abbr: "A" }), "alt");
+  assert.equal(identifyVoiceFamily({ name: "Kontraalt", abbr: "CA" }), "kontraalt");
+  assert.equal(identifyVoiceFamily({ name: "Tenor 1", abbr: "T1" }), "tenor");
+  assert.equal(identifyVoiceFamily({ name: "Tenor 2", abbr: "T2" }), "tenor");
+  assert.equal(identifyVoiceFamily({ name: "Tenor", abbr: "T" }), "tenor");
+  assert.equal(identifyVoiceFamily({ name: "Baryton", abbr: "Bar" }), "baryton");
+  assert.equal(identifyVoiceFamily({ name: "Bass 1", abbr: "B1" }), "bass");
+  assert.equal(identifyVoiceFamily({ name: "Bass 2", abbr: "B2" }), "bass");
+  assert.equal(identifyVoiceFamily({ name: "Bass", abbr: "B" }), "bass");
+});
+
+test("stemmefamilie: sortering samler S1, S2 og Sopran, og plasserer Mezzo og Baryton riktig", () => {
+  const testGroups = [
+    { id: 13, name: "Sopran", abbr: "S", color: "#f00", sortOrder: 8 },
+    { id: 6, name: "Sopran 2", abbr: "S2", color: "#f00", sortOrder: 1 },
+    { id: 5, name: "Sopran 1", abbr: "S1", color: "#f00", sortOrder: 0 },
+    { id: 14, name: "Alt", abbr: "A", color: "#fa0", sortOrder: 9 },
+    { id: 8, name: "Alt 2", abbr: "A2", color: "#fa0", sortOrder: 3 },
+    { id: 7, name: "Alt 1", abbr: "A1", color: "#fa0", sortOrder: 2 },
+    { id: 20, name: "Mezzosopran", abbr: "MS", color: "#f5a", sortOrder: 20 },
+    { id: 21, name: "Baryton", abbr: "Bar", color: "#0af", sortOrder: 21 },
+    { id: 9, name: "Tenor 1", abbr: "T1", color: "#00f", sortOrder: 4 },
+    { id: 11, name: "Bass 1", abbr: "B1", color: "#0a0", sortOrder: 6 },
+  ];
+
+  const sorted = [...testGroups].sort(compareVoiceGroups);
+  const sortedAbbrs = sorted.map((g) => g.abbr);
+  assert.deepEqual(sortedAbbrs, ["S1", "S2", "S", "MS", "A1", "A2", "A", "T1", "Bar", "B1"]);
+});
+
+test("stemmefamilie: filter og gruppering fungerer for overkategorier", () => {
+  const testGroups = [
+    { id: 5, name: "Sopran 1", abbr: "S1", color: "#f00", sortOrder: 0 },
+    { id: 6, name: "Sopran 2", abbr: "S2", color: "#f00", sortOrder: 1 },
+    { id: 13, name: "Sopran", abbr: "S", color: "#f00", sortOrder: 8 },
+    { id: 7, name: "Alt 1", abbr: "A1", color: "#fa0", sortOrder: 2 },
+  ];
+  const gMap = new Map(testGroups.map((g) => [g.id, g]));
+
+  assert.equal(matchesGroupFilter(5, "family:sopran", gMap), true);
+  assert.equal(matchesGroupFilter(6, "family:sopran", gMap), true);
+  assert.equal(matchesGroupFilter(13, "family:sopran", gMap), true);
+  assert.equal(matchesGroupFilter(7, "family:sopran", gMap), false);
+
+  assert.equal(matchesGroupFilter(5, 5, gMap), true);
+  assert.equal(matchesGroupFilter(6, 5, gMap), false);
+  assert.equal(matchesGroupFilter(5, "all", gMap), true);
+
+  const grouped = groupVoiceGroupsByFamily(testGroups);
+  assert.equal(grouped.length, 2);
+  assert.equal(grouped[0].family.key, "sopran");
+  assert.equal(grouped[0].groups.length, 3);
+  assert.equal(grouped[1].family.key, "alt");
+  assert.equal(grouped[1].groups.length, 1);
 });
 
 console.log(`\n${passed} tester OK`);

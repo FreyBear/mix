@@ -67,6 +67,9 @@ const MIGRATIONS: string[] = [
     value TEXT NOT NULL
   );
   `,
+  `
+  ALTER TABLE voice_groups ADD COLUMN category TEXT;
+  `,
 ];
 
 function migrate(db: Db) {

@@ -1,10 +1,15 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { FileUp, Pencil, Plus, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, FileUp, Pencil, Plus, Trash2 } from "lucide-react";
 import { api } from "@/lib/client/api";
 import { contrastText } from "@/lib/client/format";
 import type { Singer, VoiceGroup } from "@/lib/types";
+import {
+  compareVoiceGroups,
+  groupVoiceGroupsByFamily,
+  matchesGroupFilter,
+} from "@/lib/voice-family";
 import { Modal } from "../modal";
 import { useToast } from "../toast";
 
@@ -31,6 +36,7 @@ function SingerForm({
   const toast = useToast();
   const [d, setD] = useState(draft);
   const [busy, setBusy] = useState(false);
+  const groupedFamilies = useMemo(() => groupVoiceGroupsByFamily(groups), [groups]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -83,10 +89,14 @@ function SingerForm({
               Stemmegruppe
             </label>
             <select id="s-group" className="input" value={d.voiceGroupId} onChange={(e) => setD({ ...d, voiceGroupId: Number(e.target.value) })}>
-              {groups.map((g) => (
-                <option key={g.id} value={g.id}>
-                  {g.name}
-                </option>
+              {groupedFamilies.map(({ family, groups: fGroups }) => (
+                <optgroup key={family.key} label={family.label}>
+                  {fGroups.map((g) => (
+                    <option key={g.id} value={g.id}>
+                      {g.name} ({g.abbr})
+                    </option>
+                  ))}
+                </optgroup>
               ))}
             </select>
           </div>
@@ -223,6 +233,8 @@ function ImportDialog({
   );
 }
 
+type SortCol = "name" | "nickname" | "voice" | "height" | "status";
+
 export function SingersAdmin({
   singers,
   groups,
@@ -234,19 +246,57 @@ export function SingersAdmin({
 }) {
   const toast = useToast();
   const [query, setQuery] = useState("");
-  const [groupFilter, setGroupFilter] = useState<number | "all">("all");
+  const [groupFilter, setGroupFilter] = useState<number | string>("all");
   const [showInactive, setShowInactive] = useState(true);
+  const [sortCol, setSortCol] = useState<SortCol>("voice");
+  const [sortAsc, setSortAsc] = useState(true);
   const [editing, setEditing] = useState<Draft | null>(null);
   const [importing, setImporting] = useState(false);
+
   const groupMap = useMemo(() => new Map(groups.map((g) => [g.id, g])), [groups]);
+  const groupedFamilies = useMemo(() => groupVoiceGroupsByFamily(groups), [groups]);
+
+  const toggleSort = (col: SortCol) => {
+    if (sortCol === col) {
+      setSortAsc((prev: boolean) => !prev);
+    } else {
+      setSortCol(col);
+      setSortAsc(true);
+    }
+  };
 
   const q = query.trim().toLowerCase();
-  const list = singers.filter(
+  const filtered = singers.filter(
     (s) =>
-      (groupFilter === "all" || s.voiceGroupId === groupFilter) &&
+      matchesGroupFilter(s.voiceGroupId, groupFilter, groupMap) &&
       (showInactive || s.isActive) &&
       (!q || s.fullName.toLowerCase().includes(q) || s.nickname.toLowerCase().includes(q)),
   );
+
+  const list = useMemo(() => {
+    const arr = [...filtered];
+    arr.sort((a, b) => {
+      let diff = 0;
+      if (sortCol === "voice") {
+        const ga = groupMap.get(a.voiceGroupId);
+        const gb = groupMap.get(b.voiceGroupId);
+        if (ga && gb) diff = compareVoiceGroups(ga, gb);
+        else if (ga) diff = -1;
+        else if (gb) diff = 1;
+        if (diff === 0) diff = a.fullName.localeCompare(b.fullName, "nb");
+      } else if (sortCol === "name") {
+        diff = a.fullName.localeCompare(b.fullName, "nb");
+      } else if (sortCol === "nickname") {
+        diff = a.nickname.localeCompare(b.nickname, "nb");
+      } else if (sortCol === "height") {
+        diff = a.height - b.height;
+      } else if (sortCol === "status") {
+        diff = a.isActive === b.isActive ? 0 : a.isActive ? -1 : 1;
+      }
+      return sortAsc ? diff : -diff;
+    });
+    return arr;
+  }, [filtered, sortCol, sortAsc, groupMap]);
 
   const remove = async (s: Singer) => {
     if (!window.confirm(`Slette ${s.fullName}? Sangeren fjernes fra alle konserter.`)) return;
@@ -283,12 +333,29 @@ export function SingersAdmin({
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
         <input className="input max-w-52" placeholder="Søk" aria-label="Søk" value={query} onChange={(e) => setQuery(e.target.value)} />
-        <select className="input max-w-44" aria-label="Filtrer på stemmegruppe" value={groupFilter} onChange={(e) => setGroupFilter(e.target.value === "all" ? "all" : Number(e.target.value))}>
-          <option value="all">Alle grupper</option>
-          {groups.map((g) => (
-            <option key={g.id} value={g.id}>
-              {g.name}
-            </option>
+        <select
+          className="input max-w-56"
+          aria-label="Filtrer på stemmegruppe"
+          value={String(groupFilter)}
+          onChange={(e) => {
+            const v = e.target.value;
+            setGroupFilter(v === "all" || v.startsWith("family:") ? v : Number(v));
+          }}
+        >
+          <option value="all">Alle stemmer ({singers.length})</option>
+          {groupedFamilies.map(({ family, groups: fGroups }) => (
+            <optgroup key={family.key} label={family.label}>
+              {fGroups.length > 1 && (
+                <option value={`family:${family.key}`}>
+                  {family.label} (alle)
+                </option>
+              )}
+              {fGroups.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.name} ({g.abbr})
+                </option>
+              ))}
+            </optgroup>
           ))}
         </select>
         <label className="flex items-center gap-2 text-sm">
@@ -318,11 +385,76 @@ export function SingersAdmin({
         <table className="w-full min-w-[34rem] text-left text-sm">
           <thead className="border-b border-line text-xs text-muted">
             <tr>
-              <th className="px-3 py-2 font-medium">Navn</th>
-              <th className="px-3 py-2 font-medium">Kallenavn</th>
-              <th className="px-3 py-2 font-medium">Stemme</th>
-              <th className="px-3 py-2 font-medium">Høyde</th>
-              <th className="px-3 py-2 font-medium">Status</th>
+              <th className="px-3 py-2 font-medium">
+                <button
+                  type="button"
+                  className="flex items-center gap-1 font-medium hover:text-foreground"
+                  onClick={() => toggleSort("name")}
+                >
+                  Navn
+                  {sortCol === "name" ? (
+                    sortAsc ? <ArrowUp className="h-3.5 w-3.5" /> : <ArrowDown className="h-3.5 w-3.5" />
+                  ) : (
+                    <ArrowUpDown className="h-3.5 w-3.5 opacity-40" />
+                  )}
+                </button>
+              </th>
+              <th className="px-3 py-2 font-medium">
+                <button
+                  type="button"
+                  className="flex items-center gap-1 font-medium hover:text-foreground"
+                  onClick={() => toggleSort("nickname")}
+                >
+                  Kallenavn
+                  {sortCol === "nickname" ? (
+                    sortAsc ? <ArrowUp className="h-3.5 w-3.5" /> : <ArrowDown className="h-3.5 w-3.5" />
+                  ) : (
+                    <ArrowUpDown className="h-3.5 w-3.5 opacity-40" />
+                  )}
+                </button>
+              </th>
+              <th className="px-3 py-2 font-medium">
+                <button
+                  type="button"
+                  className="flex items-center gap-1 font-medium hover:text-foreground"
+                  onClick={() => toggleSort("voice")}
+                >
+                  Stemme
+                  {sortCol === "voice" ? (
+                    sortAsc ? <ArrowUp className="h-3.5 w-3.5" /> : <ArrowDown className="h-3.5 w-3.5" />
+                  ) : (
+                    <ArrowUpDown className="h-3.5 w-3.5 opacity-40" />
+                  )}
+                </button>
+              </th>
+              <th className="px-3 py-2 font-medium">
+                <button
+                  type="button"
+                  className="flex items-center gap-1 font-medium hover:text-foreground"
+                  onClick={() => toggleSort("height")}
+                >
+                  Høyde
+                  {sortCol === "height" ? (
+                    sortAsc ? <ArrowUp className="h-3.5 w-3.5" /> : <ArrowDown className="h-3.5 w-3.5" />
+                  ) : (
+                    <ArrowUpDown className="h-3.5 w-3.5 opacity-40" />
+                  )}
+                </button>
+              </th>
+              <th className="px-3 py-2 font-medium">
+                <button
+                  type="button"
+                  className="flex items-center gap-1 font-medium hover:text-foreground"
+                  onClick={() => toggleSort("status")}
+                >
+                  Status
+                  {sortCol === "status" ? (
+                    sortAsc ? <ArrowUp className="h-3.5 w-3.5" /> : <ArrowDown className="h-3.5 w-3.5" />
+                  ) : (
+                    <ArrowUpDown className="h-3.5 w-3.5 opacity-40" />
+                  )}
+                </button>
+              </th>
               <th className="px-3 py-2" />
             </tr>
           </thead>
@@ -338,6 +470,7 @@ export function SingersAdmin({
                       <span className="inline-block rounded-full px-2 py-0.5 text-xs font-bold" style={{ background: g?.color ?? "#94a3b8", color: contrastText(g?.color ?? "#94a3b8") }}>
                         {g?.abbr ?? "?"}
                       </span>
+                      <span className="text-xs text-muted">({g?.name ?? "?"})</span>
                     </span>
                   </td>
                   <td className="px-3 py-2">{s.height} cm</td>

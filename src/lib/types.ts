@@ -8,6 +8,7 @@ export interface VoiceGroup {
   abbr: string;
   color: string;
   sortOrder: number;
+  category?: string | null;
 }
 
 export interface Singer {

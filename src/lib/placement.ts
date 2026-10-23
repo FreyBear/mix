@@ -6,6 +6,11 @@ import type {
   Singer,
   VoiceGroup,
 } from "./types";
+import {
+  compareVoiceGroups,
+  identifyVoiceFamily,
+  type VoiceFamilyKey,
+} from "./voice-family";
 
 export interface PlacementCtx {
   singers: Singer[];
@@ -22,38 +27,46 @@ export interface PlacementState {
 const key = (row: number, slot: number) => `${row}:${slot}`;
 
 export function sortedGroups(groups: VoiceGroup[]): VoiceGroup[] {
-  return [...groups].sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id);
+  return [...groups].sort(compareVoiceGroups);
 }
 
 export function resolveGroupOrder(
   pattern: "SATB" | "TSAB" | "STBA",
   groups: VoiceGroup[],
 ): number[] {
-  const sorted = [...groups].sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id);
-  const byLetter: Record<string, VoiceGroup[]> = { S: [], A: [], T: [], B: [], other: [] };
+  const sorted = [...groups].sort(compareVoiceGroups);
+  const byFamily: Record<VoiceFamilyKey, VoiceGroup[]> = {
+    sopran: [],
+    mezzosopran: [],
+    alt: [],
+    kontraalt: [],
+    tenor: [],
+    baryton: [],
+    bass: [],
+    other: [],
+  };
 
   for (const g of sorted) {
-    const key = (g.abbr || g.name).trim().toUpperCase();
-    if (key.startsWith("S")) byLetter.S.push(g);
-    else if (key.startsWith("A")) byLetter.A.push(g);
-    else if (key.startsWith("T")) byLetter.T.push(g);
-    else if (key.startsWith("B")) byLetter.B.push(g);
-    else byLetter.other.push(g);
+    const fam = identifyVoiceFamily(g);
+    byFamily[fam].push(g);
   }
 
-  const orderKeys =
+  const familyOrder: VoiceFamilyKey[] =
     pattern === "SATB"
-      ? ["S", "A", "T", "B"]
+      ? ["sopran", "mezzosopran", "alt", "kontraalt", "tenor", "baryton", "bass"]
       : pattern === "TSAB"
-      ? ["T", "S", "A", "B"]
-      : ["S", "T", "B", "A"];
+      ? ["tenor", "baryton", "sopran", "mezzosopran", "alt", "kontraalt", "bass"]
+      : ["sopran", "mezzosopran", "tenor", "baryton", "bass", "kontraalt", "alt"];
 
   const res: number[] = [];
-  for (const k of orderKeys) {
-    const list = pattern === "STBA" && k === "A" ? [...byLetter[k]].reverse() : byLetter[k];
+  for (const fam of familyOrder) {
+    const list =
+      pattern === "STBA" && (fam === "alt" || fam === "kontraalt")
+        ? [...byFamily[fam]].reverse()
+        : byFamily[fam];
     for (const g of list) res.push(g.id);
   }
-  for (const g of byLetter.other) res.push(g.id);
+  for (const g of byFamily.other) res.push(g.id);
   return res;
 }
 
