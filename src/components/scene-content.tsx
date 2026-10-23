@@ -4,9 +4,9 @@ import { useId } from "react";
 import { BODY_D, BODY_W, type LayoutResult } from "@/lib/layout";
 import type { DropTarget } from "@/lib/placement";
 import type { Placement, Singer, VoiceGroup, RowAdjustment } from "@/lib/types";
-import { contrastText, describeLent, initials } from "@/lib/client/format";
+import { contrastText, describeLent } from "@/lib/client/format";
 
-export type Lod = "initials" | "name" | "detail";
+export type Lod = "name" | "detail";
 
 /** Meter → SVG-enheter (centimeter). */
 export const U = 100;
@@ -15,7 +15,6 @@ const RY = (BODY_D * U) / 2;
 
 export function lodForScale(k: number): Lod {
   const nodePx = BODY_W * U * k;
-  if (nodePx < 46) return "initials";
   if (nodePx < 95) return "name";
   return "detail";
 }
@@ -252,7 +251,7 @@ export function SceneContent(props: SceneContentProps) {
               selected
               ghost={false}
               dropTarget={false}
-              lod={lod === "initials" ? "initials" : "name"}
+              lod="name"
               k={k}
               interactive={false}
               lifted
@@ -349,9 +348,6 @@ function NodeShape(p: NodeShapeProps) {
   const nameFont = Math.max(8, Math.min(17, 50 / Math.max(3, nick.length * 0.62)));
   const detailNameFont = Math.max(7, Math.min(11, 46 / Math.max(3, nick.length * 0.62)));
   const lentFont = p.lentText ? Math.min(7.5, 50 / (p.lentText.length * 0.56)) : 7.5;
-  const labelPx = 13;
-  const label = nick;
-  const labelW = (label.length * 0.62 * labelPx + 14) / p.k;
 
   return (
     <g
@@ -430,19 +426,24 @@ function NodeShape(p: NodeShapeProps) {
         style={{ pointerEvents: "none", userSelect: "none" }}
         fontWeight={700}
       >
-        {p.lod === "initials" && (
-          <text y={7} fontSize={21}>
-            {initials(nick)}
-          </text>
-        )}
-        {p.lod === "name" && (
-          <text y={nameFont * 0.35} fontSize={nameFont}>
+        {p.lod !== "detail" && (
+          <text
+            y={nameFont * 0.35}
+            fontSize={nameFont}
+            textLength={nick.length * nameFont * 0.62 > 46 ? 46 : undefined}
+            lengthAdjust="spacingAndGlyphs"
+          >
             {nick}
           </text>
         )}
         {p.lod === "detail" && (
           <>
-            <text y={p.singer.height > 0 ? -5 : -2} fontSize={detailNameFont}>
+            <text
+              y={p.singer.height > 0 ? -5 : -2}
+              fontSize={detailNameFont}
+              textLength={nick.length * detailNameFont * 0.62 > 46 ? 46 : undefined}
+              lengthAdjust="spacingAndGlyphs"
+            >
               {nick}
             </text>
             <text y={p.singer.height > 0 ? 5 : 9} fontSize={p.lent ? lentFont : 7.5} fontWeight={600}>
@@ -476,32 +477,6 @@ function NodeShape(p: NodeShapeProps) {
         >
           SOLO
         </text>
-      )}
-
-      {/* «Meg selv» er alltid merket med navn, selv ved lav zoom. */}
-      {p.isMe && p.lod === "initials" && (
-        <g
-          transform={`translate(0 ${-RY - 16 / p.k - 6})`}
-          style={{ pointerEvents: "none", userSelect: "none" }}
-        >
-          <rect
-            x={-labelW / 2}
-            y={(-labelPx * 0.85) / p.k}
-            width={labelW}
-            height={(labelPx * 1.5) / p.k}
-            rx={6 / p.k}
-            fill="var(--me)"
-          />
-          <text
-            y={(labelPx * 0.35) / p.k}
-            textAnchor="middle"
-            fontSize={labelPx / p.k}
-            fontWeight={800}
-            fill="#2e1065"
-          >
-            {label}
-          </text>
-        </g>
       )}
     </g>
   );

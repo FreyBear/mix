@@ -13,7 +13,7 @@ Brukergrensesnittet er på norsk bokmål.
 - **Fokusert konsertvelger:** Korister ser kun kommende konserter sortert kronologisk (den nærmeste øverst). Gamle, avsluttede konserter skjules for å unngå feilvalg.
 - **«Hvem er du?»:** Valget lagres i nettleseren, og «meg selv» utheves med pulserende ring og navnelapp.
 - **Fast bunnlinje:** Viser rad, plass fra venstre og stemmegruppe, med sangvelger og forrige/neste.
-- **Zoombart og panorerbart lerret:** Klyp, musehjul og dra med *semantisk zoom*: initialer langt unna, kallenavn, stemme og høyde når du zoomer inn.
+- **Zoombart og panorerbart lerret:** Klyp, musehjul og dra med *semantisk zoom*: kallenavn i full oversikt, og stemmegruppe og høyde når du zoomer inn.
 - **Mørk modus og utskrift:** Sømløs mørk drakt og utskriftsvennlig visning av oppstillingene.
 - **PWA / Frakoblet bruk:** Installerbar app som fungerer uten nett etter første besøk.
 - **Personvern:** Sangerhøyder eksponeres kun for innlogget dirigent/admin.
