@@ -164,15 +164,10 @@ function Viewer({
   const stage = useRef<StageHandle | null>(null);
 
   const [selectedPresetId, setSelectedPresetId] = useState<string>("satb");
-  const [presets, setPresets] = useState<PlacementPreset[]>(() =>
-    boot.presets && boot.presets.length > 0 ? boot.presets : getBuiltInPresets(boot.groups),
-  );
-
-  useEffect(() => {
-    if (boot.presets && boot.presets.length > 0) {
-      setPresets(boot.presets);
-    }
-  }, [boot.presets]);
+  const [customPresetsList, setCustomPresetsList] = useState<PlacementPreset[] | null>(null);
+  const presets =
+    customPresetsList ??
+    (boot.presets && boot.presets.length > 0 ? boot.presets : getBuiltInPresets(boot.groups));
 
   // ---- Lagring ----------------------------------------------------------
   const localVersion = useRef(0);
@@ -526,7 +521,7 @@ function Viewer({
         groupOrder,
         type: "blocks",
       });
-      setPresets(res.presets);
+      setCustomPresetsList(res.presets);
       const created = res.presets.find((p) => p.name === name.trim());
       if (created) {
         setSelectedPresetId(created.id);
@@ -541,7 +536,7 @@ function Viewer({
   const handleDeleteCustomPreset = async (presetId: string) => {
     try {
       const res = await api<{ presets: PlacementPreset[] }>("DELETE", `/api/presets/${presetId}`);
-      setPresets(res.presets);
+      setCustomPresetsList(res.presets);
       if (selectedPresetId === presetId) {
         setSelectedPresetId("satb");
       }

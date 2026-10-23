@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ArrowDownAZ,
   ChevronLeft,
@@ -46,7 +46,9 @@ export function StageSetupCard({
   const [tab, setTab] = useState<"setup" | "solo">("setup");
   const [showCustomModal, setShowCustomModal] = useState(false);
   const [newPresetName, setNewPresetName] = useState("");
-  const [customOrder, setCustomOrder] = useState<number[]>([]);
+  const [userCustomOrder, setUserCustomOrder] = useState<number[] | null>(null);
+  const defaultOrder = useMemo(() => groups.map((g) => g.id), [groups]);
+  const customOrder = userCustomOrder ?? defaultOrder;
 
   const spacing = s.singerSpacing ?? 75;
 
@@ -55,25 +57,20 @@ export function StageSetupCard({
     presets.find((p) => p.id === "satb") ||
     presets[0];
 
-  useEffect(() => {
-    if (groups.length > 0) {
-      setCustomOrder(groups.map((g) => g.id));
-    }
-  }, [groups]);
-
   const moveGroup = (idx: number, delta: number) => {
     const target = idx + delta;
     if (target < 0 || target >= customOrder.length) return;
     const next = [...customOrder];
     const [item] = next.splice(idx, 1);
     next.splice(target, 0, item);
-    setCustomOrder(next);
+    setUserCustomOrder(next);
   };
 
   const handleSaveCustom = async () => {
     if (!newPresetName.trim() || !onCreateCustomPreset) return;
     await onCreateCustomPreset(newPresetName.trim(), customOrder);
     setNewPresetName("");
+    setUserCustomOrder(null);
     setShowCustomModal(false);
   };
 
