@@ -9,8 +9,10 @@ import { computeLayout } from "../src/lib/layout";
 import {
   autoSort,
   effectiveGroupId,
+  getBuiltInPresets,
   moveSinger,
   reconcile,
+  resolveGroupOrder,
   setOverride,
   toggleBench,
   toggleSolo,
@@ -619,6 +621,27 @@ test("import: replaceExisting erstatter eksisterende sangere og sletter demodata
   assert.equal(newSingers.length, 4, "kun de 4 nye sangerne finnes nå i databasen");
   assert.equal(newSingers[0].fullName, "Ny Sanger 1");
   assert.equal(newSingers[3].fullName, "Ny Sanger 4");
+});
+
+test("forvalg: SSTTBBAA Vanlig plasserer A2 før A1", () => {
+  const groups = [
+    { id: 1, name: "Sopran 1", abbr: "S1", color: "#f00", sortOrder: 1 },
+    { id: 2, name: "Sopran 2", abbr: "S2", color: "#f00", sortOrder: 2 },
+    { id: 3, name: "Alt 1", abbr: "A1", color: "#0f0", sortOrder: 3 },
+    { id: 4, name: "Alt 2", abbr: "A2", color: "#0f0", sortOrder: 4 },
+    { id: 5, name: "Tenor 1", abbr: "T1", color: "#00f", sortOrder: 5 },
+    { id: 6, name: "Tenor 2", abbr: "T2", color: "#00f", sortOrder: 6 },
+    { id: 7, name: "Bass 1", abbr: "B1", color: "#ff0", sortOrder: 7 },
+    { id: 8, name: "Bass 2", abbr: "B2", color: "#ff0", sortOrder: 8 },
+  ];
+  const order = resolveGroupOrder("STBA", groups);
+  assert.deepEqual(order, [1, 2, 5, 6, 7, 8, 4, 3]);
+
+  const builtIn = getBuiltInPresets(groups);
+  const stba = builtIn.find((p) => p.id === "stba");
+  if (!stba) throw new Error("Fant ikke stba preset");
+  assert.equal(stba.name, "SSTTBBAA Vanlig");
+  assert.deepEqual(stba.groupOrder, [1, 2, 5, 6, 7, 8, 4, 3]);
 });
 
 console.log(`\n${passed} tester OK`);

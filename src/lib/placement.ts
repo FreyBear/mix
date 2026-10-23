@@ -50,7 +50,8 @@ export function resolveGroupOrder(
 
   const res: number[] = [];
   for (const k of orderKeys) {
-    for (const g of byLetter[k]) res.push(g.id);
+    const list = pattern === "STBA" && k === "A" ? [...byLetter[k]].reverse() : byLetter[k];
+    for (const g of list) res.push(g.id);
   }
   for (const g of byLetter.other) res.push(g.id);
   return res;
@@ -74,7 +75,7 @@ export function getBuiltInPresets(groups: VoiceGroup[]): PlacementPreset[] {
     },
     {
       id: "stba",
-      name: "STBA (Flanker: S – T – B – A)",
+      name: "SSTTBBAA Vanlig",
       type: "blocks",
       groupOrder: resolveGroupOrder("STBA", groups),
       builtIn: true,
