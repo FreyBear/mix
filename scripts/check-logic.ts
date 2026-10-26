@@ -713,4 +713,30 @@ test("stemmefamilie: filter og gruppering fungerer for overkategorier", () => {
   assert.equal(grouped[1].groups.length, 1);
 });
 
+test("dybdesentrering: koret sentreres automatisk i dybden når det er plass", () => {
+  // Scenedybde 10m, koret har 3 rader med ca 1.8m dybde
+  const l = computeLayout(12, 10, { ...s1.settings, arc: 0, rows: 3 }, items(s1));
+  const choirY = l.nodes.filter((n) => n.zone === "choir").map((n) => n.y);
+  const backY = Math.min(...choirY);
+  const frontY = Math.max(...choirY);
+  const clearanceBack = backY;
+  const clearanceFront = 10 - frontY;
+
+  // Begge sider skal ha tilnærmet lik buffer (symmetrisk sentrert)
+  assert.ok(Math.abs(clearanceBack - clearanceFront) < 1e-4, `symmetrisk: bak=${clearanceBack}, foran=${clearanceFront}`);
+  assert.ok(clearanceBack > 3.5, "koret er flyttet ut fra bakveggen mot midten av scenen");
+});
+
+test("dybdesentrering med bue: tar hensyn til buen og holder koret sentrert", () => {
+  const l = computeLayout(12, 10, { ...s1.settings, arc: 60, rows: 3 }, items(s1));
+  const choirY = l.nodes.filter((n) => n.zone === "choir").map((n) => n.y);
+  const backY = Math.min(...choirY);
+  const frontY = Math.max(...choirY);
+  const clearanceBack = backY;
+  const clearanceFront = 10 - frontY;
+
+  assert.ok(Math.abs(clearanceBack - clearanceFront) < 1e-4, `bue sentrert: bak=${clearanceBack}, foran=${clearanceFront}`);
+  assert.equal(l.outsideIds.size, 0, "ingen utenfor scenen med bue");
+});
+
 console.log(`\n${passed} tester OK`);

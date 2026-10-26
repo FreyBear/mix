@@ -155,14 +155,35 @@ export function computeLayout(
   const warnings: LayoutWarning[] = [];
   if (!fits && rows > 0) warnings.push({ kind: "depth", singerIds: [] });
 
-  // Koret forankres bakerst på scenen.
+  // Koret sentreres i dybden hvis det er plass på scenen.
+  const choirItems = placed.filter((i) => i.status === "choir");
+  let minRaw = Infinity;
   let maxRaw = -Infinity;
-  for (let r = 0; r < rows; r++) {
-    for (let i = 0; i < C; i++) {
-      maxRaw = Math.max(maxRaw, pos(r, i, rowSpacing).y);
+  if (choirItems.length > 0) {
+    for (const it of choirItems) {
+      const eff = effSlot.get(it.singerId) ?? it.slot;
+      const y = pos(it.row, eff, rowSpacing).y;
+      minRaw = Math.min(minRaw, y);
+      maxRaw = Math.max(maxRaw, y);
+    }
+  } else {
+    for (let r = 0; r < rows; r++) {
+      for (let i = 0; i < C; i++) {
+        const y = pos(r, i, rowSpacing).y;
+        minRaw = Math.min(minRaw, y);
+        maxRaw = Math.max(maxRaw, y);
+      }
     }
   }
-  const shift = maxRaw - (stageD - MARGIN);
+  const choirDepth = Math.max(0, maxRaw - minRaw);
+  const frontMargin = MARGIN + (hasSolos ? SOLO_GAP : 0);
+  const backMargin = MARGIN;
+  const availDepth = stageD - frontMargin - backMargin;
+  const surplus = Math.max(0, availDepth - choirDepth);
+
+  // shift plasserer koret: ved overskuddsplass flyttes koret frem med surplus / 2,
+  // slik at det er like mye buffer foran og bak.
+  const shift = maxRaw - (stageD - backMargin) + surplus / 2;
   const place = (r: number, i: number) => {
     const p = pos(r, i, rowSpacing);
     return { x: p.x, y: p.y - shift };
